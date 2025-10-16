@@ -200,7 +200,310 @@ The standardized Lakehouse ETL methodology (Bronze → Silver → Gold layers) i
 
 By integrating LLD concepts such as DIP (decoupling the execution from the underlying cloud storage) and Strategy (allowing flexible ETL transformations), the component design signals deep domain expertise and architectural sophistication, directly aligning the design with core Databricks technologies.
 
-## Part IV: Interview Execution and Best Practices
+## Part IV: A Deep Dive into Python Concurrency
+
+Concurrency and parallelism are critical topics in interviews for platforms like Databricks, where performance and efficiency are paramount. Understanding Python's different concurrency models and, most importantly, *when* to use each one, is a key indicator of engineering maturity. 
+
+### 7. Concurrency vs. Parallelism: A Critical Distinction
+
+First, it's essential to clarify the terms:
+
+*   **Concurrency:** Is about *dealing* with many things at once. It’s a structural concept. A single-core CPU running a web server can be concurrent by switching between handling different client requests. It makes progress on all of them, but only one is actively executing at any given instant.
+*   **Parallelism:** Is about *doing* many things at once. It’s an execution concept. A multi-core CPU can achieve parallelism by assigning different tasks to different cores, allowing them to run simultaneously.
+
+**The Global Interpreter Lock (GIL)** is the central reason these concepts are so distinct in Python. The GIL is a mutex that allows only one thread to execute Python bytecode at a time, even on a multi-core processor. This means that for CPU-bound code, `threading` cannot achieve true parallelism.
+
+### 8. The `threading` Module
+
+*   **Best For:** **I/O-bound tasks**. This includes waiting for network requests, reading from a hard drive, or querying a database. During these waits, Python releases the GIL, allowing another thread to run.
+*   **Core Concepts:** Threads are lightweight execution paths managed by the Operating System. They live within a single process and **share the same memory space**. This makes sharing data easy but also introduces the risk of race conditions.
+*   **Key Challenge:** **Race conditions**. Because memory is shared, if multiple threads try to read and write to the same variable, the final state can be unpredictable. This requires using synchronization primitives like locks.
+
+#### Common `threading` APIs
+
+1.  **`threading.Thread`**: The fundamental object for creating a thread.
+2.  **`concurrent.futures.ThreadPoolExecutor`**: The modern, high-level, and recommended way to manage a pool of threads.
+3.  **`threading.Lock`**: The most basic tool to prevent race conditions by allowing only one thread at a time to execute a critical section of code.
+4.  **`queue.Queue`**: A thread-safe data structure, ideal for passing messages and work items between threads.
+
+#### Common Pattern: Concurrent I/O with `ThreadPoolExecutor`
+
+This pattern is perfect for tasks like fetching multiple web pages. The `ThreadPoolExecutor` manages a pool of worker threads, and its `.map()` method applies a function to each item in an iterable, collecting the results.
+
+```python
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+def io_bound_task(item):
+    """Simulates a task that waits for I/O, like a network call."""
+    thread_name = threading.current_thread().name
+    print(f"Starting task {item} on thread {thread_name}")
+    time.sleep(1) # Simulate I/O wait (GIL is released here)
+    print(f"Finished task {item}")
+    return item * 2
+
+# Use the high-level executor for clean management
+with ThreadPoolExecutor(max_workers=5) as executor:
+    results = executor.map(io_bound_task, range(5))
+
+print("--- Results ---")
+for result in results:
+    print(result)
+```
+
+#### Communication Pattern: Thread-Safe Producer-Consumer Queue
+
+When you need to pass data between threads, directly sharing variables with locks can be complex. A much safer and more robust pattern is to use `queue.Queue`. This data structure is internally synchronized (thread-safe), handling all the locking for you.
+
+```python
+import threading
+import queue
+import time
+import random
+
+def producer(q, count):
+    """Produces items and puts them on the queue."""
+    for i in range(count):
+        item = f"item-{i}"
+        time.sleep(random.uniform(0.1, 0.5))
+        q.put(item)
+        print(f"Producer {threading.current_thread().name} produced {item}")
+    q.put(None) # Sentinel value to signal completion
+
+def consumer(q):
+    """Consumes items from the queue until it finds the sentinel."""
+    while True:
+        item = q.get() # This call blocks until an item is available
+        if item is None:
+            q.put(None) # Put the sentinel back for other consumers
+            break
+        print(f"Consumer {threading.current_thread().name} consumed {item}")
+        q.task_done() # Signal that the work for this item is done
+
+work_queue = queue.Queue()
+
+# Create and start producer and consumer threads
+producer_thread = threading.Thread(target=producer, args=(work_queue, 5))
+consumer_threads = [threading.Thread(target=consumer, args=(work_queue)) for _ in range(2)]
+
+producer_thread.start()
+for t in consumer_threads:
+    t.start()
+
+# Wait for the producer to finish
+producer_thread.join()
+# Wait for the queue to be empty (all tasks processed)
+work_queue.join()
+
+print("All work completed.")
+```
+
+### 9. The `multiprocessing` Module
+
+*   **Best For:** **CPU-bound tasks**. This includes data processing, complex calculations, and anything that keeps the CPU busy. It is the only standard way in Python to achieve true parallelism.
+*   **Core Concepts:** This module bypasses the GIL by creating entirely new **processes**. Each process has its own Python interpreter and its own memory space. This prevents race conditions by default but makes sharing data more explicit and expensive (it requires serialization, or "pickling").
+*   **Key Challenge:** **Inter-Process Communication (IPC)**. Because memory is not shared, you must use explicit IPC mechanisms like Queues or Pipes to pass data between processes.
+
+#### Common `multiprocessing` APIs
+
+1.  **`multiprocessing.Process`**: The fundamental object for creating a process.
+2.  **`multiprocessing.Pool`**: The high-level, idiomatic way to manage a pool of worker processes. Its API is very similar to `ThreadPoolExecutor`.
+3.  **`pool.map()` vs. `pool.imap_unordered()`**: `map` blocks and returns all results at once (high memory usage). `imap_unordered` returns an iterator, yielding results as they complete (low memory usage), which is often preferred.
+4.  **`multiprocessing.Queue`**: A process-safe queue for IPC.
+5.  **`multiprocessing.Pipe`**: A two-way communication channel between a pair of processes.
+
+#### Common Pattern: Parallel CPU-Bound Work with `Pool`
+
+This pattern is ideal for problems like the "Parallel Data Processor" LLD. It distributes a CPU-intensive function over a list of data chunks.
+
+```python
+import multiprocessing
+import time
+import os
+
+def cpu_bound_task(item):
+    """Simulates a task that does heavy computation."""
+    process_name = multiprocessing.current_process().name
+    print(f"Starting task {item} on process {process_name}")
+    # Simulate CPU work
+    result = 0
+    for i in range(10**7):
+        result += i
+    print(f"Finished task {item}")
+    return item, result
+
+# Use a Pool to leverage all available CPU cores
+# The `if __name__ == '__main__':` guard is mandatory for multiprocessing
+if __name__ == '__main__':
+    with multiprocessing.Pool(processes=os.cpu_count()) as pool:
+        # Use imap_unordered for memory efficiency
+        results_iterator = pool.imap_unordered(cpu_bound_task, range(5))
+
+        print("--- Results ---")
+        for item, result in results_iterator:
+            print(f"Result for {item} is {result}")
+```
+
+#### IPC Pattern: Passing Data with `multiprocessing.Queue`
+
+When you need to send data from a worker process back to the main process (or between workers) outside of a `Pool.map` call, the `multiprocessing.Queue` is the standard tool. It handles all the serialization (pickling) and synchronization automatically.
+
+```python
+import multiprocessing
+import time
+
+def worker(work_q, result_q):
+    """Worker process that gets data from a queue and puts results on another."""
+    while not work_q.empty():
+        try:
+            item = work_q.get(timeout=0.1)
+            print(f"Process {os.getpid()} working on {item}")
+            # Simulate work
+            time.sleep(0.5)
+            result_q.put((item, item * 2))
+        except multiprocessing.queues.Empty:
+            # Queue might be empty if multiple workers are competing
+            pass
+
+if __name__ == '__main__':
+    work_queue = multiprocessing.Queue()
+    result_queue = multiprocessing.Queue()
+
+    # Populate work queue
+    for i in range(10):
+        work_queue.put(i)
+
+    # Create and start worker processes
+    processes = []
+    for _ in range(4):
+        p = multiprocessing.Process(target=worker, args=(work_queue, result_queue))
+        processes.append(p)
+        p.start()
+
+    # Wait for all workers to finish
+    for p in processes:
+        p.join()
+
+    # Collect results
+    print("--- Results ---")
+    while not result_queue.empty():
+        item, result = result_queue.get()
+        print(f"Result for {item} is {result}")
+```
+
+### 10. The `asyncio` Module
+
+*   **Best For:** **High-throughput I/O-bound tasks**, especially when dealing with a very large number (hundreds, thousands, or more) of concurrent connections. Ideal for network servers, API gateways, and database connection pools.
+*   **Core Concepts:** `asyncio` is a single-threaded, single-process model that uses an **event loop** and **cooperative multitasking**. Instead of threads, you define **coroutines** (`async def`). When a coroutine encounters an `await` on an I/O operation, it explicitly yields control back to the event loop, which can then run other ready coroutines. It's highly efficient because it avoids OS thread context-switching overhead.
+*   **Key Challenge:** **Blocking the event loop**. A single long-running, synchronous (CPU-bound) function call will freeze the entire application, as it prevents the event loop from running other tasks.
+
+#### Common `asyncio` APIs
+
+1.  **`async def` / `await`**: The syntax for defining and pausing coroutines.
+2.  **`asyncio.run()`**: The main entry point to start an `asyncio` program.
+3.  **`asyncio.create_task()`**: Schedules a coroutine to run concurrently on the event loop.
+4.  **`asyncio.gather()`**: A clean way to run and wait for multiple awaitables concurrently.
+5.  **`asyncio.wait_for()`**: Enforces a timeout on an awaitable.
+6.  **`asyncio.Queue`**: A queue for use within `asyncio` tasks.
+
+#### Common Pattern: High-Concurrency I/O with `gather`
+
+This pattern is perfect for the "API Aggregator" LLD, where you need to make many concurrent network requests and handle them with resilience.
+
+```python
+import asyncio
+import random
+
+async def async_io_bound_task(item):
+    """Simulates a high-latency I/O operation like an API call."""
+    print(f"Starting task {item}...")
+    delay = random.uniform(0.5, 2.0)
+    await asyncio.sleep(delay) # Yields control to the event loop
+    print(f"Finished task {item} in {delay:.2f}s")
+    return item * 2
+
+async def main():
+    # create_task schedules the coroutines to run as soon as possible
+    tasks = [asyncio.create_task(async_io_bound_task(i)) for i in range(5)]
+
+    # gather waits for all tasks to complete
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=1.5
+        )
+        print("--- Results ---")
+        for result in results:
+            if isinstance(result, Exception):
+                print(f"A task failed with an error: {result}")
+            else:
+                print(f"Got result: {result}")
+    except asyncio.TimeoutError:
+        print("Operation timed out after 1.5s!")
+
+# To run the program:
+# asyncio.run(main())
+```
+
+#### Communication Pattern: Async Producer-Consumer Queue
+
+Similar to `threading`, `asyncio` has its own `Queue` for safely passing data between concurrently running coroutines. The key difference is that its `get()` and `put()` methods are awaitable, ensuring they don't block the event loop.
+
+```python
+import asyncio
+import random
+
+async def producer(q, count):
+    """Produces items and puts them on the async queue."""
+    for i in range(count):
+        item = f"item-{i}"
+        await asyncio.sleep(random.uniform(0.1, 0.5))
+        await q.put(item)
+        print(f"Producer produced {item}")
+
+async def consumer(name, q):
+    """Consumes items from the async queue."""
+    while True:
+        item = await q.get() # Awaits until an item is available
+        print(f"Consumer {name} consumed {item}")
+        await asyncio.sleep(random.uniform(0.5, 1.0)) # Simulate work
+        q.task_done() # Signal that work for this item is done
+
+async def main():
+    work_queue = asyncio.Queue(maxsize=5)
+
+    # Start consumers
+    consumers = [asyncio.create_task(consumer(f"C{i}", work_queue)) for i in range(2)]
+
+    # Run producer and wait for it to finish
+    await producer(work_queue, 10)
+
+    # Wait for the queue to be fully processed
+    await work_queue.join()
+
+    # Cancel the consumer tasks, which are in an infinite loop
+    for c in consumers:
+        c.cancel()
+
+    print("All work completed.")
+
+# To run the program:
+# asyncio.run(main())
+```
+
+### 11. Summary: Choosing the Right Model
+
+| Feature | `threading` | `multiprocessing` | `asyncio` |
+| :--- | :--- | :--- | :--- |
+| **Best For** | I/O-bound (e.g., web requests, disk reads) | **CPU-bound** (e.g., calculations, data processing) | **High-throughput I/O-bound** (e.g., web servers, network services) |
+| **Parallelism** | Concurrency (No true parallelism due to GIL) | **True Parallelism** (Bypasses GIL) | Concurrency (No parallelism, single-threaded) |
+| **Memory Model** | Shared Memory | Separate Memory | Shared Memory (within one process) |
+| **Overhead** | Low | High (Process creation is expensive) | **Very Low** (No OS-level context switching) |
+| **Key Challenge** | Race Conditions & Locks | Data Serialization (Pickling) & IPC | Blocking the Event Loop |
+
+
+## Part V: Interview Execution and Best Practices
 
 ### 7. Mastering the LLD Interview Execution
 
