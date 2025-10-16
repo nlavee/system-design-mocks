@@ -6,8 +6,9 @@ from functools import partial
 from typing import Callable, List, Dict, Any, Iterable, TypeVar
 
 # --- Type Variables for Generic Functions ---
-T = TypeVar('T') # Represents an intermediate result type (e.g., a dict or Counter)
-R = TypeVar('R') # Represents the final aggregated result type
+# Represents an intermediate result type (e.g., a dict or Counter)
+T = TypeVar('T')
+R = TypeVar('R')  # Represents the final aggregated result type
 
 # --- Configure Logging for Observability ---
 logging.basicConfig(
@@ -16,6 +17,7 @@ logging.basicConfig(
 )
 
 # --- Worker Function (Must be at the top level for pickling) ---
+
 
 def _process_file_wrapper(filepath: str, process_func: Callable[[str], T]) -> T | None:
     """
@@ -42,6 +44,7 @@ def _process_file_wrapper(filepath: str, process_func: Callable[[str], T]) -> T 
 
 # --- Main Processor Class ---
 
+
 class ParallelDataProcessor:
     """
     Processes a large number of text files in a directory in parallel.
@@ -66,7 +69,8 @@ class ParallelDataProcessor:
                          optimal for CPU-bound tasks.
         """
         self.num_workers = num_workers or os.cpu_count()
-        logging.info(f"Initialized processor with {self.num_workers} worker processes.")
+        logging.info(
+            f"Initialized processor with {self.num_workers} worker processes.")
 
     def process_directory(
         self,
@@ -99,7 +103,9 @@ class ParallelDataProcessor:
         # `functools.partial` is used to create a new function with the
         # `process_func` argument "baked in". This is a clean and efficient
         # way to pass fixed arguments to a map function in multiprocessing.
-        task = partial(_process_file_wrapper, process_func=process_func)
+        # task = partial(_process_file_wrapper, process_func=process_func)
+        def task(p): return (_process_file_wrapper(
+            p, process_func=process_func))
 
         final_result: R = initial_value
         with Pool(processes=self.num_workers) as pool:
@@ -115,7 +121,8 @@ class ParallelDataProcessor:
 
             for intermediate_result in results_iterator:
                 if intermediate_result is not None:
-                    final_result = aggregator_func(final_result, intermediate_result)
+                    final_result = aggregator_func(
+                        final_result, intermediate_result)
 
         logging.info("All files have been processed and results aggregated.")
         return final_result
