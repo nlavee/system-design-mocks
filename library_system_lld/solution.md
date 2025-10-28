@@ -42,7 +42,7 @@ This design makes the system highly testable and modular. We also heavily levera
 
 ---
 
-## Part 2: Solutions for "The Databricks Edge"
+## Part 2: Solutions for "The System Design Edge"
 
 ### 1. Distributed Catalog for Multiple Branches
 

@@ -78,20 +78,20 @@ This is the function that each worker process will execute.
 
 ---
 
-## 3. Connecting to Distributed Computing (The Databricks Edge)
+## 3. Connecting to Distributed Computing (The System Design Edge)
 
-This single-machine parallel processing pattern is a microcosm of the **Map-Reduce** paradigm that powers large-scale distributed systems like Apache Spark.
+This single-machine parallel processing pattern is a microcosm of the **Map-Reduce** paradigm that powers large-scale distributed computing frameworks.
 
 *   **The "Map" Phase:** Applying the `_process_file_wrapper` function to each file via `pool.imap_unordered` is the **Map** phase. Each file is an independent partition of our total dataset, and we are applying a transformation to it.
 
 *   **The "Reduce" Phase:** The `for` loop in the main `process_directory` method that consumes the results iterator and combines each intermediate result into a single `final_result` is the **Reduce** phase.
 
-### Analogy to Apache Spark
+### Analogy to Distributed Computing Frameworks
 
 | Single-Machine (`multiprocessing`) | Distributed System (Apache Spark) |
 | :--- | :--- |
 | List of `filepaths` | Data Partitions in an RDD or DataFrame |
-| `Pool` Worker Process | Spark Executor (JVM on a worker node) |
+| `Pool` Worker Process | Executor (on a worker node) |
 | `_process_file_wrapper` | A map function (`.map()` or UDF) applied by an Executor |
 | IPC (Pipes/Queues) | Network Shuffle |
 | Main Process Aggregation | Reduce task running on an Executor |
@@ -100,9 +100,9 @@ This single-machine parallel processing pattern is a microcosm of the **Map-Redu
 
 When this pattern scales from a single machine to a distributed cluster, the primary challenge shifts from Inter-Process Communication (IPC) to **network I/O**.
 
-*   **Data Transfer:** In our script, the OS efficiently passes results from child processes to the parent via memory or local pipes. In Spark, intermediate results from the map phase must be **serialized**, sent across the network (a "shuffle"), and **deserialized** by a reducer. This network shuffle is often the most expensive part of a Spark job.
-*   **Fault Tolerance:** If a worker process in our script dies, the `Pool` may error out, but the whole job fails. In Spark, the driver tracks the lineage of data transformations (the DAG). If an executor node dies, the driver can replay the necessary tasks on another node to re-compute the lost data partition, providing fault tolerance.
-*   **Serialization:** The cost of serialization becomes much more significant with network transfer. This is why efficient serialization formats (like Kryo in the JVM, or columnar formats like Parquet/Arrow for data) are critical in distributed systems, whereas Python's default (pickle) is acceptable for local IPC.
+*   **Data Transfer:** In our script, the OS efficiently passes results from child processes to the parent via memory or local pipes. In distributed computing frameworks, intermediate results from the map phase must be **serialized**, sent across the network (a "shuffle"), and **deserialized** by a reducer. This network shuffle is often the most expensive part of a distributed job.
+*   **Fault Tolerance:** If a worker process in our script dies, the `Pool` may error out, but the whole job fails. In distributed computing frameworks, the driver tracks the lineage of data transformations (the DAG). If an executor node dies, the driver can replay the necessary tasks on another node to re-compute the lost data partition, providing fault tolerance.
+*   **Serialization:** The cost of serialization becomes much more significant with network transfer. This is why efficient serialization formats (like Kryo in the JVM, or columnar formats like Parquet/Arrow for data) are critical in distributed computing frameworks, whereas Python's default (pickle) is acceptable for local IPC.
 
 ---
 

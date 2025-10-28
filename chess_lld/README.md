@@ -14,7 +14,7 @@ This is a Low-Level Design (LLD) exercise. The focus is on architectural quality
     *   Complex rules like check, checkmate, and stalemate.
     *   Special moves such as castling and en passant.
 3.  **Extensibility:** The design should be modular and extensible, allowing for new rules or even new chess variants to be added with minimal changes to the core system (adhering to the Open/Closed Principle).
-4.  **Concurrency & Data Integrity (The Databricks Edge):** The design must consider a scenario where game states might be accessed or simulated concurrently. The solution should incorporate principles that ensure thread safety and maintain a reliable, auditable history of moves, similar to the transaction logs in systems like Delta Lake.
+4.  **Concurrency & Data Integrity (The System Design Edge):** The design must consider a scenario where game states might be accessed or simulated concurrently. The solution should incorporate principles that ensure thread safety and maintain a reliable, auditable history of moves, similar to the transaction logs in distributed systems.
 
 ### Evaluation Criteria
 

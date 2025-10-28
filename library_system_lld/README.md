@@ -24,7 +24,7 @@ Design the backend for a library management system. The system must track books,
     *   **Observer Pattern:** Use this to notify members when a book they have reserved becomes available.
 *   **Data Integrity:** The system must ensure that the state of the library (e.g., who has which book) is always consistent.
 
-### The Databricks Edge: Concurrency & Distributed Systems
+### The System Design Edge: Concurrency & Distributed Systems
 
 A Staff-level discussion must address the challenges of a large, multi-branch system. Be prepared to answer:
 

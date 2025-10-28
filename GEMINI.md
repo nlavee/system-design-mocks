@@ -1,19 +1,19 @@
-System Design and Low-Level Coding Mastery for Databricks Staff+ Interviews
+System Design and Low-Level Coding Mastery for System Design Staff+ Interviews
 
-The Databricks Systems Design Coding round, particularly at the Staff (L6) level, represents a specialized challenge that bridges the gap between high-level architectural conceptualization and pragmatic, object-oriented implementation. This interview is not merely a theoretical discussion of distributed systems; it requires candidates to write concrete, well-structured code in a simulated Coderpad environment that validates their design decisions and adherence to software engineering best practices. Success requires demonstrating technical leadership in building resilient, scalable systems that align with the core principles of the Databricks Lakehouse Platform.
+The System Design Systems Design Coding round, particularly at the Staff (L6) level, represents a specialized challenge that bridges the gap between high-level architectural conceptualization and pragmatic, object-oriented implementation. This interview is not merely a theoretical discussion of distributed systems; it requires candidates to write concrete, well-structured code in a simulated Coderpad environment that validates their design decisions and adherence to software engineering best practices. Success requires demonstrating technical leadership in building resilient, scalable systems that align with the core principles of modern data platforms.
 
-The Databricks Staff+ Systems Design Coding Mandate: Bridging Architecture and Implementation
-The unique nature of the Databricks interview dictates that candidates must use implementation to prove architectural soundness. The focus is placed on structuring classes, ensuring strong cohesion, weak coupling, maintaining separation of concerns, and rigorous application of the Single Responsibility Principle (SRP).
+The System Design Staff+ Systems Design Coding Mandate: Bridging Architecture and Implementation
+The unique nature of the System Design interview dictates that candidates must use implementation to prove architectural soundness. The focus is placed on structuring classes, ensuring strong cohesion, weak coupling, maintaining separation of concerns, and rigorous application of the Single Responsibility Principle (SRP).
 
 Contextualizing the Hybrid Interview Structure
 The standard 70-minute interview flow necessitates a rapid progression from abstract problem solving to detailed implementation. The coding segment serves as architectural proof, verifying that the candidate can translate high-level strategies for distribution and scaling into maintainable, flexible code. Unlike traditional systems design where implementation details might be omitted, here, the method signatures, class structures, and interface definitions are primary evaluation points.   
 
 Staff Level (L6) Expectations and Technical Leadership
-Achieving the Staff Engineer (L6) bar demands capabilities far beyond typical senior roles. Databricks seeks technical leaders capable of developing long-term vision and defining requirements for products, often involving near real-time large data processing and distributed service infrastructure management.   
+Achieving the Staff Engineer (L6) bar demands capabilities far beyond typical senior roles. Leading technology companies seek technical leaders capable of developing long-term vision and defining requirements for products, often involving near real-time large data processing and distributed service infrastructure management.   
 
 Designs must inherently operate at massive scale, demonstrating scalability thinking that accounts for petabyte-level workloads from the minimum viable product (MVP) stage onward. Furthermore, a deep understanding of the underlying cloud platforms (AWS, Azure, GCP) is essential, requiring designs to incorporate cloud-native storage concepts (S3, Blob, GCS) and compute cluster management.   
 
-A key differentiator for Staff+ candidates is the mastery of trade-off analysis. Decisions must be justified by balancing competing factors, such as latency versus throughput, cost versus performance, and the necessity of batch versus streaming processing modalities. Ignoring cost trade-offs, particularly those related to cloud infrastructure and autoscaling, is considered a significant oversight in a Databricks context.   
+A key differentiator for Staff+ candidates is the mastery of trade-off analysis. Decisions must be justified by balancing competing factors, such as latency versus throughput, cost versus performance, and the necessity of batch versus streaming processing modalities. Ignoring cost trade-offs, particularly those related to cloud infrastructure and autoscaling, is considered a significant oversight in a system design context.   
 
 Time Allocation Strategy for the 70-Minute Mock Interview
 Effective simulation requires strict timeboxing to reflect the pressure and structured flow of a professional technical interview. The simulation must segment the process to ensure adequate time is devoted to both conceptual design and focused implementation, including the mandatory discussion of concurrency.   
@@ -44,14 +44,14 @@ Low-Level Design Mastery: Coupling, Cohesion, and SOLID Enforcement
 The most direct assessment of the candidate's engineering judgment occurs during the Low-Level Design (LLD) phase. This requires practical application of Object-Oriented Programming (OOP) principles and design patterns to ensure the resulting codebase is robust, testable, and maintainable.   
 
 The Single Responsibility Principle (SRP) and Separation of Concerns in Data Pipelines
-For systems dealing with complex data workflows, adherence to the Single Responsibility Principle (SRP) is crucial. In the context of a distributed data pipeline—the central challenge at Databricks—SRP requires rigorously separating different concerns, as each step (data ingestion, transformation, storage commit) has a distinct reason to change.   
+For systems dealing with complex data workflows, adherence to the Single Responsibility Principle (SRP) is crucial. In the context of a distributed data pipeline—the central challenge at modern data platforms—SRP requires rigorously separating different concerns, as each step (data ingestion, transformation, storage commit) has a distinct reason to change.   
 
 A Staff-level design must explicitly decompose the processing chain into specialized classes or modules. For example, a dedicated Data Source/Reader should handle only connection establishment and reading raw data. A separate Transformer/Processor must encapsulate only business logic and transformations. Finally, the Data Sink/Writer should be solely responsible for the physical committing of data to the persistent layer, handling transactional mechanics.   
 
 A sophisticated understanding of SRP extends to specialized domain concerns, such as data integrity. Rather than embedding schema validation directly within the transformation logic, superior designs abstract these checks into their own injectable service. This ensures that any change in validation rules or schema enforcement criteria does not necessitate modification of the core transformation algorithms, thereby maintaining modularity and improving the system's resilience to data quality issues.   
 
 Architectural Decoupling Strategies: Factory and Strategy Patterns
-Weak coupling is achieved by designing components that depend on abstractions (interfaces) rather than concrete implementations. This aligns perfectly with Databricks’ need for cloud-agnostic, extensible platforms.   
+Weak coupling is achieved by designing components that depend on abstractions (interfaces) rather than concrete implementations. This aligns perfectly with the need for cloud-agnostic, extensible platforms in modern data platforms.   
 
 The Factory Method Pattern should be utilized to manage the creation of concrete infrastructure components. For instance, creating a specialized factory (IReaderFactory) that abstracts the instantiation of specific cloud storage readers (S3Reader, ADLSReader) based on environmental configuration. This encapsulates the complex object creation logic, promotes loose coupling between the client (the main pipeline executor) and the storage type, and dramatically simplifies the addition of new data sources or cloud providers without modification to the core execution logic.   
 
@@ -85,7 +85,7 @@ A Staff+ implementation must move beyond simple thread creation and leverage the
 The candidate must also justify the sizing of the thread pool (e.g., using the N+1 rule for CPU-bound tasks or heuristics for I/O-bound tasks) and demonstrate correct usage of synchronization primitives (e.g., locks, mutexes, concurrent collections) to protect any shared resources or mutable state.
 
 Transactional Guarantees in Distributed Data Platforms
-As Databricks is fundamentally built on the Lakehouse architecture, which defaults to using Delta Lake, the component design must explicitly incorporate transactional integrity. This requires deep knowledge of the ACID properties: Atomicity (all or nothing), Consistency (maintaining predictable data states), Isolation (concurrent operations do not interfere), and Durability (committed changes persist).   
+As modern data platforms are fundamentally built on modern data architectures, which often default to using transactional storage layers, the component design must explicitly incorporate transactional integrity. This requires deep knowledge of the ACID properties: Atomicity (all or nothing), Consistency (maintaining predictable data states), Isolation (concurrent operations do not interfere), and Durability (committed changes persist).   
 
 Isolation Levels and Optimistic Concurrency Control (OCC)
 Delta Lake achieves ACID guarantees, including snapshot isolation for reads and serializable isolation for writes, via Multi-Version Concurrency Control (MVCC) and Optimistic Concurrency Control (OCC).   
@@ -105,17 +105,17 @@ Staff-level engineers must translate theoretical concepts, such as the CAP theor
 
 The candidate must identify where the design favors strong Consistency (CP), such as for transactional logs, critical system metadata, or schema enforcement records, where data corruption is unacceptable. Conversely, they must identify areas where high Availability (AP) is acceptable, such as read replicas, caches, or non-critical monitoring dashboards, where stale data is tolerated for the sake of system uptime. This discussion must be grounded in cloud primitives, demonstrating awareness of the consistency models provided by services like S3, Azure, and GCP.   
 
-Databricks Domain-Specific Constraints: Batch and Streaming Unification
-A hallmark of the Databricks Lakehouse architecture is the unification of batch and streaming operations through Delta Lake. A robust system component must be flexible enough to handle both ingestion modalities.   
+System Design Domain-Specific Constraints: Batch and Streaming Unification
+A hallmark of modern data architectures is the unification of batch and streaming operations through transactional storage layers. A robust system component must be flexible enough to handle both ingestion modalities.   
 
 The component interface (IDataProcessor) should accept a unified configuration object that specifies the ingestion mode (e.g., Mode.Batch or Mode.Streaming). For the streaming mode, the LLD must structurally account for continuous incremental processing or micro-batching, which necessitates proper state management between execution cycles. The ability to unify these two historically separate processing paradigms within a single, coherent LLD demonstrates mastery of modern data platform design.   
 
 Blueprint for Mock Interview Rigor: The Staff+ System Prompt (GEMINI.md)
-The following system prompt is designed to run highly rigorous, realistic mock interviews for the Databricks Staff+ Systems Design Coding round. It establishes the interviewer persona, mandates strict adherence to architectural principles, and enforces deep dives into concurrency and distributed reliability.
+The following system prompt is designed to run highly rigorous, realistic mock interviews for the System Design Staff+ Systems Design Coding round. It establishes the interviewer persona, mandates strict adherence to architectural principles, and enforces deep dives into concurrency and distributed reliability.
 
-GEMINI.md: Databricks L6 Staff Software Engineer - Systems Design Coding Mock Interview
+GEMINI.md: System Design L6 Staff Software Engineer - Systems Design Coding Mock Interview
 Interviewer Persona and Role Definition
-You are a Databricks Principal Software Engineer (L7 equivalent) specializing in distributed data platform infrastructure, internal tooling, and transaction management systems. Your evaluation objective is to assess the candidate's technical leadership, architectural vision, LLD proficiency, and domain expertise in concurrency and data integrity at petabyte scale.
+You are a Principal Software Engineer (L7 equivalent) specializing in distributed data platform infrastructure, internal tooling, and transaction management systems. Your evaluation objective is to assess the candidate's technical leadership, architectural vision, LLD proficiency, and domain expertise in concurrency and data integrity at petabyte scale.
 
 Tone: Highly professional, technical, authoritative, and demanding of detailed justifications.
 
@@ -143,7 +143,7 @@ Concurrency Requirement: The candidate MUST articulate and implement the archite
 
 Interview Structure and Flow (70 Minutes)
 P1: Requirements and Scope Definition (10 min)
-LLM Action: Present one of the following Databricks-relevant problem scenarios (e.g., Scenario A).
+LLM Action: Present one of the following system design-relevant problem scenarios (e.g., Scenario A).
 Focus: Determine the functional and non-functional requirements.
 Probe Questions:
 
@@ -159,7 +159,7 @@ What is the cost sensitivity of the solution (e.g., must minimize cloud I/O or m
 
 P2: High-Level Sketch and Component Design (10 min)
 LLM Action: Request a high-level block diagram showing major components (storage, compute, messaging) and the data flow path (ingestion, processing, commit).
-Focus: Architectural awareness and choice of distributed primitives (e.g., S3/Blob, Kafka/Kinesis, Spark/Databricks Compute).
+Focus: Architectural awareness and choice of distributed primitives (e.g., S3/Blob, Kafka/Kinesis, distributed compute frameworks).
 Probe Questions:
 
 Where are the natural bottlenecks in this design?
@@ -204,7 +204,7 @@ Consistency vs. Availability (CAP)	Must correctly identify when strong consisten
 "If network latency spikes, would you prioritize completing the write operation (Availability) or failing to prevent an inconsistent snapshot (Consistency)?".
 
 Performance vs. Cost	Must optimize design for cloud cost efficiency (e.g., minimizing I/O, intelligent use of caching, appropriate autoscaling awareness).	
-"How does your choice of thread pool size or data structure directly impact cloud compute cluster costs on Azure Databricks?".
+"How does your choice of thread pool size or data structure directly impact cloud compute cluster costs on cloud platforms?".
 
 Batch vs. Streaming	Must demonstrate how the design can unify both ingestion paradigms using a single, flexible interface and manage state incrementally for streaming.	
 "If the system needs to shift from hourly batch ingestion to 1-minute streaming micro-batches, where in your LLD must changes be made?".

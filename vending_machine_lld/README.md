@@ -23,7 +23,7 @@ Design the back-end software for a networked vending machine. The system must ma
 *   **Single Responsibility Principle (SRP):** Your design should feature clear separation of concerns. For example, you should have distinct components like an `InventoryManager` (handles item stock), a `PaymentProcessor` (handles money), and the core `VendingMachine` (manages state).
 *   **Extensibility:** The design should be easy to extend. For example, adding a new payment method (like a credit card) should be possible without rewriting the entire system.
 
-### The Databricks Edge: Concurrency & Distributed Systems
+### The System Design Edge: Concurrency & Distributed Systems
 
 A Staff-level discussion must address the problem of scale. Be prepared to answer:
 

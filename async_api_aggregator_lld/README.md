@@ -36,7 +36,7 @@ The primary goal is to minimize latency for the end-user, even when the downstre
 
 *   **Resource Management:** How would you limit the number of concurrent outgoing requests to a specific downstream service (e.g., ensuring you never have more than 100 in-flight requests to the `RecommendationService`)? This tests your knowledge of synchronization primitives like `asyncio.Semaphore`.
 
-#### **The Databricks Edge: Analogy to Distributed Query Federation**
+#### **The System Design Edge: Analogy to Distributed Query Federation**
 
 A Staff-level discussion should connect this pattern to challenges in distributed data systems.
 

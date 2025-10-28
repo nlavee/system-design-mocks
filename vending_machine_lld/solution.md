@@ -79,7 +79,7 @@ To ensure the design is modular and maintainable, responsibilities are separated
 """
 
 """
-Part 2: Solutions for "The Databricks Edge" (Distributed System Design)
+Part 2: Solutions for "The System Design Edge" (Distributed System Design)
 
 This section provides high-level architectural solutions for managing a fleet of 10,000
 networked vending machines, as per the `README.md` edge questions.

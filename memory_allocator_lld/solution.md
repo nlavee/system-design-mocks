@@ -61,17 +61,17 @@ The goal is to create a component that manages a raw block of memory, handling a
 
 ---
 
-## Part 2: Solutions for "The Databricks Edge"
+## Part 2: Solutions for "The System Design Edge"
 
-### 1. Fragmentation Impact on Spark Jobs
+### 1. Fragmentation Impact on Data Processing Jobs
 
 **External Fragmentation** is the primary issue. This is when free memory is broken into many small, non-contiguous blocks. Even if the *total* free memory is large, an allocation request for a large *contiguous* block will fail.
 
-In a data-intensive Spark job, tasks frequently need to allocate large, contiguous memory buffers for operations like sorting, shuffling, or caching data partitions. If the executor's memory is highly fragmented due to many small allocations and deallocations, a task requiring a large buffer (e.g., 128MB) might fail with an Out-Of-Memory error, even if there are gigabytes of total free memory available in small chunks. This leads to task failures, retries, and can ultimately cause the entire Spark job to fail, harming stability and performance.
+In a data-intensive job, tasks frequently need to allocate large, contiguous memory buffers for operations like sorting, shuffling, or caching data partitions. If the executor's memory is highly fragmented due to many small allocations and deallocations, a task requiring a large buffer (e.g., 128MB) might fail with an Out-Of-Memory error, even if there are gigabytes of total free memory available in small chunks. This leads to task failures, retries, and can ultimately cause the entire job to fail, harming stability and performance.
 
 ### 2. Concurrency Strategy for a Multi-Threaded Environment
 
-The naive solution of placing a single global lock around `allocate()` and `free()` would serialize all memory operations, completely destroying parallelism within a Spark executor and becoming a massive performance bottleneck.
+The naive solution of placing a single global lock around `allocate()` and `free()` would serialize all memory operations, completely destroying parallelism within an executor and becoming a massive performance bottleneck.
 
 A Staff-level solution involves moving away from a single global heap:
 
@@ -84,14 +84,14 @@ A Staff-level solution involves moving away from a single global heap:
 
 This design is far more complex but provides the high degree of concurrency required for a modern data processing engine.
 
-### 3. Garbage Collection and Off-Heap Memory (Project Tungsten)
+### 3. Garbage Collection and Off-Heap Memory (Advanced Memory Management)
 
-*   **Manual vs. Automatic:** Our custom allocator is a **manual** system; the programmer must explicitly call `free()`. This is fundamentally different from the **automatic** garbage collection (GC) in the JVM or Python, where the runtime automatically detects and reclaims objects that are no longer referenced.
+*   **Manual vs. Automatic:** Our custom allocator is a **manual** system; the programmer must explicitly call `free()`. This is fundamentally different from the **automatic** garbage collection (GC) in many runtimes (e.g., JVM or Python), where the runtime automatically detects and reclaims objects that are no longer referenced.
 
-*   **The Problem with GC:** While automatic GC is convenient, it has major drawbacks for high-performance systems like Spark: (1) **Overhead:** The GC process itself consumes CPU cycles. (2) **Unpredictability:** GC pauses (sometime called "stop-the-world" pauses) can occur at any time, introducing unpredictable latency into query execution.
+*   **The Problem with GC:** While automatic GC is convenient, it has major drawbacks for high-performance systems: (1) **Overhead:** The GC process itself consumes CPU cycles. (2) **Unpredictability:** GC pauses (sometime called "stop-the-world" pauses) can occur at any time, introducing unpredictable latency into execution.
 
-*   **The Databricks/Spark Solution (Off-Heap Memory):** This is the exact motivation for **Project Tungsten** in Spark. Spark explicitly allocates large chunks of memory directly from the operating system, outside the JVM's garbage-collected heap (this is called **off-heap memory**). Spark then uses its own internal memory manager, which functions very much like our custom `MemoryAllocator`, to manage this off-heap memory. By managing memory manually, Spark can:
+*   **The Advanced Solution (Off-Heap Memory):** This is the exact motivation for advanced memory management techniques in high-performance data processing systems. Such systems explicitly allocate large chunks of memory directly from the operating system, outside the runtime's garbage-collected heap (this is called **off-heap memory**). They then use their own internal memory manager, which functions very much like our custom `MemoryAllocator`, to manage this off-heap memory. By managing memory manually, these systems can:
     1.  **Eliminate GC Overhead:** Avoid unpredictable GC pauses for this data.
-    2.  **Enable Cache-Aware Computation:** Arrange data in a compact, cache-friendly binary format (e.g., columnar layout) that would be impossible with standard JVM objects. This allows for much faster processing.
+    2.  **Enable Cache-Aware Computation:** Arrange data in a compact, cache-friendly binary format (e.g., columnar layout) that would be impossible with standard runtime objects. This allows for much faster processing.
 
-Our custom allocator is therefore a simplified model of the memory management system at the very core of Spark's high-performance Tungsten execution engine.
+Our custom allocator is therefore a simplified model of the memory management system at the very core of high-performance execution engines.

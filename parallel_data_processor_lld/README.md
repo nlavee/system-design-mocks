@@ -28,7 +28,7 @@ This problem focuses on leveraging multiple CPU cores to complete a CPU-bound ta
 
 *   **Error Handling & Robustness:** What happens if a worker process crashes while processing a malformed file? How does the main process handle this without stalling indefinitely?
 
-### The Databricks Edge: Analogy to Distributed Computing
+### The System Design Edge: Analogy to Distributed Computing
 
 A Staff-level discussion must connect this single-machine parallel processing problem to the architecture of a large-scale distributed computing system like Apache Spark.
 

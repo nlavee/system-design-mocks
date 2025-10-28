@@ -20,7 +20,7 @@ Design a generic rate-limiting component that can be used to control the number 
 *   **Concurrency:** The rate limiter is a classic concurrency problem. It will be accessed by multiple threads simultaneously (representing concurrent requests). Your implementation must be thread-safe. You should be able to justify your choice of synchronization (e.g., a lock per client vs. a global lock).
 *   **Data Structures:** The choice of data structures is critical for performance. You should be able to explain the trade-offs of using different structures (e.g., a `deque` or a timestamped list for a sliding window).
 
-### The Databricks Edge: Distributed Rate Limiting at Scale
+### The System Design Edge: Distributed Rate Limiting at Scale
 
 This is the most critical part of the Staff-level discussion. A single-instance rate limiter is not enough for a large-scale platform.
 

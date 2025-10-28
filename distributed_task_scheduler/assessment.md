@@ -33,7 +33,7 @@ A Staff+ interview isn't just about getting the right answer, but also about sho
 
 ### Final Verdict
 
-**Would you pass for a Staff-level interview at Databricks?**
+**Would you pass for a Staff-level interview at a leading technology company?**
 
 **Yes.**
 

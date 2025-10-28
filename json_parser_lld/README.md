@@ -26,7 +26,7 @@ This problem tests your ability to design a robust, low-level utility, focusing 
 *   **Object Model:** You should design a clean set of classes to represent the parsed JSON in memory (e.g., `JsonObject`, `JsonArray`, `JsonString`, etc.). This demonstrates your ability to model data structures.
 *   **Robustness:** Meticulous handling of edge cases (e.g., trailing commas, unclosed brackets, invalid escape sequences) and clear, specific error handling are critical.
 
-### The Databricks Edge: Large-Scale Data Processing
+### The System Design Edge: Large-Scale Data Processing
 
 A Staff-level discussion must address how this component would function in a big data environment. Be prepared to answer:
 

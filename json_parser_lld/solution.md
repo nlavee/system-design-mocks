@@ -49,7 +49,7 @@ We will use a **Recursive Descent** approach for the parser. This is a natural a
 
 ---
 
-## Part 2: Solutions for "The Databricks Edge"
+## Part 2: Solutions for "The System Design Edge"
 
 ### 1. Streaming Parser for Large-Scale Data
 
@@ -74,4 +74,4 @@ This streaming approach is directly analogous to how Spark processes massive fil
 **Optimizations:**
 1.  **Buffered I/O:** The `StreamingTokenizer` should not read one character at a time from the stream. It should read in larger, fixed-size chunks (e.g., 4KB or 8KB) into an internal buffer. It then processes characters from this buffer. When the buffer is exhausted, it reads the next chunk from the stream. This drastically reduces the number of expensive I/O system calls.
 
-2.  **Schema-Aware Tabular Conversion (Advanced):** For the use case of a large array of objects, a Staff-level parser could be designed to be "schema-aware." Instead of creating millions of Python dictionaries, if the parser detects this structure, it could be configured to directly serialize the data into a highly efficient, columnar in-memory format like **Apache Arrow** or a **Pandas DataFrame**. This bypasses the overhead of intermediate Python object creation and is a technique used in modern data systems like Databricks to accelerate data loading and processing.
+2.  **Schema-Aware Tabular Conversion (Advanced):** For the use case of a large array of objects, a Staff-level parser could be designed to be "schema-aware." Instead of creating millions of Python dictionaries, if the parser detects this structure, it could be configured to directly serialize the data into a highly efficient, columnar in-memory format like **Apache Arrow** or a **Pandas DataFrame**. This bypasses the overhead of intermediate Python object creation and is a technique used in modern data systems to accelerate data loading and processing.

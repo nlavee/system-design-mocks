@@ -110,7 +110,7 @@ The design uses the Strategy Pattern to decouple the `RateLimiter` class from th
 - **Initial Problem**: An early design considered using a background "janitor" thread to periodically clean up old timestamps or refill tokens.
 - **Solution**: We moved this logic inside the `allow_client` method. State is updated "just-in-time" when a request arrives. This is more efficient (no wasted CPU cycles), less complex (no background thread to manage), and more correct as it makes the state check and update an atomic operation within the client's lock.
 
-## 3. Distributed Architecture (The "Databricks Edge")
+## 3. Distributed Architecture (The "System Design Edge")
 
 ### The Challenge: Global State
 To enforce a global rate limit, the state (timestamps or token counts) must be moved from local memory to a centralized data store that is accessible by all servers in the cluster.
