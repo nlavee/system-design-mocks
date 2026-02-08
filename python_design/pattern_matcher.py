@@ -118,6 +118,18 @@ class Charset(Matcher):
     return None
 
 
+# Matching any character NOT in a Set.
+class NegatedCharset(Matcher):
+  def __init__(self, chars, rest=None):
+    super().__init__(rest)
+    self.charSet = set([c for c in chars])
+
+  def _match(self, text, start):
+    if start < len(text) and text[start] not in self.charSet:
+      return self.rest._match(text, start + 1)
+    return None
+
+
 # Matching range of character. E.g. Range("a", "z") matches any single lower case Latin alphabetic character.
 class Range(Matcher):
   def __init__(self, range_start, range_end, rest=None):
