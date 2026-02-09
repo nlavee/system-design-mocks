@@ -19,12 +19,19 @@ This problem tests your ability to design a robust, low-level utility, focusing 
     *   `null`
 2.  **Nested Structures:** The parser must be able to handle arbitrarily nested objects and arrays.
 3.  **Error Handling:** The parser must be robust. It should throw a specific, informative exception (e.g., `MalformedJsonException`) when it encounters invalid syntax, indicating where the error occurred if possible.
+4.  **Reference Support (New Challenge):** The parser must support referencing other JSON objects (including self-references) within the same document. A simple reference syntax can be adopted, for example, an object with a single key `$ref` whose value is a JSONPath-like string (e.g., `{"$ref": "$.users[0].address"}`). The parser should resolve these references to the actual JSON object they point to.
 
 ### LLD Focus & Evaluation Criteria
 
 *   **Parsing Logic:** The core of the evaluation is the parsing algorithm itself. A common approach is a **recursive descent parser**, where different functions are responsible for parsing different types (e.g., `parse_object`, `parse_array`, `parse_string`). The logic must be clean and easy to follow.
 *   **Object Model:** You should design a clean set of classes to represent the parsed JSON in memory (e.g., `JsonObject`, `JsonArray`, `JsonString`, etc.). This demonstrates your ability to model data structures.
 *   **Robustness:** Meticulous handling of edge cases (e.g., trailing commas, unclosed brackets, invalid escape sequences) and clear, specific error handling are critical.
+*   **Reference Resolution (New Challenge Focus):**
+    *   **Mechanism:** How are references identified and resolved?
+    *   **Circular References:** How does the parser handle circular references (e.g., `A` refers to `B`, and `B` refers to `A`) to prevent infinite loops?
+    *   **Error Handling:** What happens if a reference points to a non-existent path?
+    *   **Performance:** What are the performance implications of reference resolution, especially with deep nesting or many references?
+
 
 ### The System Design Edge: Large-Scale Data Processing
 
