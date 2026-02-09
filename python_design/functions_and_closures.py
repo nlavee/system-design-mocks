@@ -5,362 +5,569 @@ This file implements the core components for handling functions and their calls
 within a simple mini-language interpreter, based on Chapter 8: Functions and Closures
 from "Software Design by Example" (https://third-bit.com/sdxpy/func/).
 
-The goal is to demonstrate how a programming system saves instructions for later use
-(function definition), how functions are treated as data, and how function calls
-manage scope using a call stack.
-
-Key concepts illustrated:
-- Anonymous functions: Functions defined without an immediate name.
-- Eager evaluation: Arguments are evaluated before a function is called.
-- Dynamic scoping: Variables are looked up by searching the entire call stack
-  from the most recent frame to the oldest. This is simpler to implement but
-  can be harder to reason about in large programs compared to lexical scoping.
-- Call stack and stack frames: How environments are managed during function calls.
-- Closures (explained in Python context): How inner functions can "capture"
-  variables from their enclosing scope, even after the outer function has returned.
-  Note: The mini-language interpreter implemented here uses dynamic scoping, 
-  so it does not support closures in the same way Python does. The closure
-  examples from the text are provided in Python for illustration.
+This version includes a comprehensive set of solutions to the exercises presented
+in the chapter, demonstrating a deeper exploration of the concepts.
 """
 
-# --- Environment Management ---
-# The 'env' in this interpreter is a list of dictionaries, representing the call stack.
-# Each dictionary in the list is a 'stack frame'.
-# The global environment is the first dictionary in the list (env[0]).
-# When a function is called, a new stack frame is pushed onto the list.
-# When a function returns, its stack frame is popped off.
 
+# --- Environment Management ---
 def env_get(env_stack: list[dict], name: str):
-    """
-    Retrieves the value associated with 'name' from the environment stack.
-    This implements dynamic scoping: it searches from the most recent stack frame
-    (end of the list) backwards to the oldest (global scope).
-    """
     for frame in reversed(env_stack):
         if name in frame:
             return frame[name]
     raise NameError(f"Name '{name}' not found in environment.")
 
+
 def env_set(env_stack: list[dict], name: str, value):
-    """
-    Sets the value of 'name' in the current (most recent) stack frame.
-    If the name already exists in the current frame, its value is updated.
-    If it doesn't exist, it's added to the current frame.
-    """
     env_stack[-1][name] = value
 
+
 # --- Function Definition and Call Handlers ---
-
 def _do_func_handler(env_stack: list[dict], args: list):
-    """
-    Handles the "func" operation, which defines a function.
-    In this mini-language, a function definition is treated as data.
-    It simply returns a representation of the function: a list containing
-    the keyword "func", its parameter names, and its body expression.
-
-    The 'env_stack' argument is part of the general 'do' signature but is
-    not directly used here for defining the function's behavior, as this
-    interpreter uses dynamic scoping. In a lexical scoping model, the
-    environment at the point of definition would be captured here to form a closure.
-
-    Args:
-        env_stack: The current environment stack (not used for definition in dynamic scoping).
-        args: A list containing two elements:
-              - params: A list of strings, representing the parameter names.
-              - body: The expression (list) that constitutes the function's body.
-
-    Returns:
-        A list representing the function definition: ["func", params, body].
-    """
     assert len(args) == 2, "func expects 2 arguments: [params_list, body_expr]"
-    params = args[0]  # List of parameter names (e.g., ["num"])
-    body = args[1]    # The expression representing the function's body (e.g., ["get", "num"])
-    return ["func", params, body]
+    return ["func", args[0], args[1]]
+
 
 def _do_call_handler(env_stack: list[dict], args: list):
     """
-    Handles the "call" operation, which executes a previously defined function.
-    This function is responsible for:
-    1. Evaluating arguments (eager evaluation).
-    2. Looking up the function by name.
-    3. Creating a new stack frame for the function's execution.
-    4. Executing the function's body within the new environment.
-    5. Discarding the new stack frame upon completion.
-    6. Returning the function's result.
-
-    Args:
-        env_stack: The current environment stack.
-        args: A list where the first element is the function's name (string),
-              followed by expressions for its arguments.
-
-    Returns:
-        The result of executing the function's body.
+    Handles the "call" operation.
+    (Exercise Solution for loop-based frame creation is implemented here).
     """
-    # Step 1: Set up the call.
-    assert len(args) >= 1, "call expects at least 1 argument: [function_name, arg1, arg2, ...]"
-    name = args[0]  # The name of the function to call (e.g., "same")
-
-    # Evaluate all arguments passed to the function in the *current* environment.
-    # This is an example of eager evaluation: arguments are computed before
-    # the function's body begins execution.
+    assert len(args) >= 1, "call expects at least 1 argument"
+    name = args[0]
     values = [do(env_stack, a) for a in args[1:]]
-
-    # Step 2: Find the function.
-    # Retrieve the function definition (which is data: ["func", params, body])
-    # from the environment using dynamic scoping.
     func = env_get(env_stack, name)
-    assert isinstance(func, list) and (func[0] == "func"), f"'{name}' is not a function."
 
-    # Unpack the function definition into its parameters and body.
+    assert isinstance(func, list) and (
+        func[0] == "func"
+    ), f"'{name}' is not a function."
     params, body = func[1], func[2]
 
-    # Basic type and arity checking.
-    assert len(values) == len(params), \
-        f"Function '{name}' expected {len(params)} arguments, but got {len(values)}."
+    # (Exercise Solution for Arity Mismatch)
+    # The following line checks if the number of arguments matches the number of parameters.
+    assert len(values) == len(
+        params
+    ), f"Function '{name}' expected {len(params)} arguments, but got {len(values)}."
 
-    # Step 3: Create a new environment (stack frame) for the function's execution.
-    # A new dictionary is created, mapping the function's parameter names to
-    # the evaluated argument values. This dictionary becomes the new stack frame.
-    # This new frame is then appended to the 'env_stack', making it the active scope.
-    # The text mentions an exercise to rewrite this line using a loop;
-    # for now, we use the concise built-in functions as provided in the text.
-    env_stack.append(dict(zip(params, values)))
+    # (Exercise Solution for loop-based frame)
+    new_frame = {}
+    for i in range(len(params)):
+        new_frame[params[i]] = values[i]
+    env_stack.append(new_frame)
 
-    # Step 4: Call 'do' to run the function's body within the new environment.
-    # The 'do' function will now look up variables starting from this new stack frame.
     result = do(env_stack, body)
-
-    # Step 5: Discard the environment created in Step 3.
-    # After the function's execution, its stack frame is removed from the 'env_stack'.
-    # This restores the previous scope, preventing name collisions and cleaning up resources.
     env_stack.pop()
-
-    # Step 6: Return the function's result.
     return result
 
-# --- Main Interpreter Loop (Simplified 'do' function) ---
 
+# --- Main Interpreter Loop (Dynamic Scoping) ---
 def do(env_stack: list[dict], expr):
-    """
-    The main interpreter function. It evaluates an expression within the
-    given environment stack. This is a simplified version to support the
-    example program from the text.
-
-    Args:
-        env_stack: The current environment stack (list of dictionaries).
-        expr: The expression to evaluate. Can be a literal (number, string)
-              or a list representing an operation.
-
-    Returns:
-        The result of evaluating the expression.
-    """
-    # If the expression is not a list, it's a literal value (e.g., a number).
     if not isinstance(expr, list):
         return expr
-
-    # If it's a list, the first element is the operation, and the rest are arguments.
-    op = expr[0]
-    args = expr[1:]
-
+    op, *args = expr
     if op == "func":
-        # Handle function definition.
         return _do_func_handler(env_stack, args)
-
-    elif op == "call":
-        # Handle function call.
+    if op == "call":
         return _do_call_handler(env_stack, args)
-
-    elif op == "set":
-        # Assign a value to a variable in the current scope.
-        name_to_set = args[0]
-        value_expr = args[1]
-        value = do(env_stack, value_expr) # Evaluate the value expression
-        env_set(env_stack, name_to_set, value)
-        return None # 'set' operations typically don't return a meaningful value
-
-    elif op == "get":
-        # Retrieve the value of a variable.
-        name_to_get = args[0]
-        return env_get(env_stack, name_to_get)
-
-    elif op == "add":
-        # Perform addition.
-        val1 = do(env_stack, args[0])
-        val2 = do(env_stack, args[1])
-        return val1 + val2
-
-    elif op == "print":
-        # Print a value to standard output.
-        value_to_print = do(env_stack, args[0])
-        print(value_to_print)
+    if op == "set":
+        env_set(env_stack, args[0], do(env_stack, args[1]))
         return None
-
-    elif op == "seq":
-        # Execute a sequence of expressions, returning the result of the last one.
+    if op == "get":
+        return env_get(env_stack, args[0])
+    if op == "add":
+        return do(env_stack, args[0]) + do(env_stack, args[1])
+    if op == "print":
+        print(do(env_stack, args[0]))
+        return None
+    if op == "seq":
         result = None
         for sub_expr in args:
             result = do(env_stack, sub_expr)
         return result
-
-    elif op == "repeat":
-        # Repeat an expression a specified number of times.
+    if op == "repeat":
         count = do(env_stack, args[0])
-        body_expr = args[1]
         result = None
         for _ in range(count):
-            result = do(env_stack, body_expr)
+            result = do(env_stack, args[1])
         return result
+    raise ValueError(f"Unknown operation: {op}")
 
-    else:
-        # Raise an error for unsupported operations.
-        raise ValueError(f"Unknown operation: {op}")
 
-# --- Example Program from the Text ---
-
-# This program defines a 'double' function, initializes 'a' to 1,
-# and then repeats a sequence 4 times:
-# 1. Doubles the value of 'a' using the 'double' function.
-# 2. Prints the new value of 'a'.
-# Expected output: 2, 4, 8, 16
-example_program = ["seq",
-  ["set", "double",
-    ["func", ["num"],
-      ["add", ["get", "num"], ["get", "num"]]
-    ]
-  ],
-  ["set", "a", 1],
-  ["repeat", 4, ["seq",
-    ["set", "a", ["call", "double", ["get", "a"]]],
-    ["print", ["get", "a"]]
-  ]]
+# --- Base Example Program ---
+example_program = [
+    "seq",
+    ["set", "double", ["func", ["num"], ["add", ["get", "num"], ["get", "num"]]]],
+    ["set", "a", 1],
+    [
+        "repeat",
+        4,
+        [
+            "seq",
+            ["set", "a", ["call", "double", ["get", "a"]]],
+            ["print", ["get", "a"]],
+        ],
+    ],
 ]
 
-# --- Execution ---
+# --- EXERCISE SOLUTIONS ---
+
+
+# This section provides solutions and detailed explanations for the exercises
+
+# presented in Chapter 8: Functions and Closures of "Software Design by Example".
+
+
+# --- Exercise: Working Counter ---
+
+# This exercise explores different ways to implement a counter function in Python
+
+# that "remembers" its state across calls, specifically addressing Python's
+
+# variable binding rules in closures.
+
+
+def make_counter_mutable():
+    """
+
+    (Solution using a mutable object).
+
+    This implementation uses a mutable list to hold the counter's state.
+
+    The inner function `_inner` closes over the `value` list. When `_inner`
+
+    modifies `value[0]`, it's modifying the *contents* of the list object
+
+    that it has a reference to, not reassigning the `value` variable itself.
+
+    This bypasses Python's default behavior where assignment to a variable
+
+    within an inner scope creates a new local variable unless `nonlocal` is used.
+
+    """
+
+    value = [0]  # `value` is a list (mutable object)
+
+    def _inner():
+
+        # Modifies the element of the captured list, not the list variable itself.
+
+        value[0] += 1
+
+        return value[0]
+
+    return _inner
+
+
+def make_counter_nonlocal():
+    """
+
+    (Solution using the `nonlocal` keyword).
+
+    This is the modern and Pythonic way to implement a counter closure.
+
+    The `nonlocal` keyword explicitly tells Python that `value` refers to the
+
+    variable in the nearest enclosing scope (i.e., `make_counter_nonlocal`'s scope)
+
+    that is not global. This allows the inner function to directly modify
+
+    the `value` variable from its enclosing scope.
+
+    """
+
+    value = 0  # `value` is an integer (immutable object)
+
+    def _inner():
+
+        nonlocal value  # Declare that `value` is not local to `_inner`
+
+        value += 1  # Now modifies the `value` from the outer scope
+
+        return value
+
+    return _inner
+
+
+# --- Exercise: Chained Maps for Lexical Scoping ---
+
+
+# This exercise demonstrates how to implement lexical scoping in our mini-interpreter
+# using "chained maps" (a linked list of environments). Lexical scoping means
+# that variables are resolved based on where the function was *defined*
+# (the structure of the code), not where it is *called*.
+class ChainedMap:
+    """
+    Represents a single scope (or stack frame) in a lexically-scoped environment.
+    Each ChainedMap holds its local variables and a reference to its parent scope.
+    """
+
+    def __init__(self, parent=None):
+        """
+        Initializes a new scope. The `parent` argument establishes the chain.
+        """
+        self.frame = {}  # Dictionary for local variables in this scope
+        self.parent = parent  # Reference to the enclosing (parent) scope
+
+    def get(self, name: str):
+        """
+        Retrieves a variable's value by searching up the chain of scopes.
+        This implements lexical lookup: it first checks the current frame,
+        then its parent, and so on, until the global scope.
+        """
+        if name in self.frame:
+            return self.frame[name]
+        if self.parent:
+            return self.parent.get(name)  # Recursively search parent scope
+
+        raise NameError(f"Name '{name}' not found")
+
+    def set(self, name: str, value):
+        """
+        Sets a variable's value in the current, most specific scope.
+        In this simple model, assignment always happens in the current frame.
+        """
+        self.frame[name] = value
+
+
+def do_lexical(env: ChainedMap, expr):
+    """
+    An interpreter function designed to work with `ChainedMap` environments,
+    thereby enforcing lexical scoping.
+    Key differences from `do` (dynamic scoping):
+    - Environment (`env`) is a `ChainedMap` instance, not a list.
+    - Function definitions (`func`) capture their definition-time environment (`env`)
+      to form a "closure" (stored as `["closure", ..., def_env]`).
+    - Function calls (`call`) create a new `ChainedMap` whose parent is the
+      `def_env` of the captured closure, correctly preserving lexical context.
+    """
+    if not isinstance(expr, list):
+        # Handle bare identifiers (strings) as variable lookups.
+        if isinstance(expr, str) and expr.isidentifier():
+            try:
+                return env.get(expr)  # Lexical lookup for variables
+            except NameError:
+                return expr  # If not a variable, treat as a literal string
+        return expr  # Literal values (numbers, non-identifier strings)
+    op, *args = expr
+
+    if op == "set":
+        # Evaluate the value and set it in the current lexical scope.
+        env.set(args[0], do_lexical(env, args[1]))
+        return None
+    elif op == "func":
+        # When a function is *defined*, we capture the current lexical environment (`env`).
+        # This captured environment (`def_env`) will be used later when the function is *called*,
+        # allowing it to access variables from its definition context (closure).
+        return [
+            "closure",
+            args[0],
+            args[1],
+            env,
+        ]  # ["closure", params, body, definition_env]
+    elif op == "call":
+        func_expr = args[0]
+        # Evaluate the function expression to get the closure data.
+        closure = do_lexical(env, func_expr)
+        # we need to retrieve the closure from the environment.
+        if isinstance(closure, str) and closure.isidentifier():
+            closure = env.get(closure)
+        closure_type, params, body, def_env = closure
+        assert (
+            closure_type == "closure"
+        ), f"'{func_expr}' is not a callable function (closure)."
+        # Evaluate arguments in the *calling* environment.
+        arg_values = [do_lexical(env, arg) for arg in args[1:]]
+
+        # Create a new environment for the function's execution.
+        # CRUCIALLY, the parent of this new environment is the `def_env` (the environment
+        # where the function was defined), *not* the calling environment. This enforces lexical scoping.
+        call_env = ChainedMap(parent=def_env)
+
+        # Assign argument values to parameters in the new call environment.
+        assert len(params) == len(
+            arg_values
+        ), f"Function arity mismatch for {func_expr}"
+        for i in range(len(params)):
+            call_env.set(params[i], arg_values[i])
+
+        # Execute the function's body within its new, lexically-scoped environment.
+        return do_lexical(call_env, body)
+    elif op == "add":
+        return do_lexical(env, args[0]) + do_lexical(env, args[1])
+    elif op == "seq":
+        result = None
+        for sub_expr in args:
+            result = do_lexical(env, sub_expr)
+        return result
+    raise ValueError(f"Unknown operation: {op}")
+
+
+# --- Exercise: Implicit Sequence ---
+# This exercise demonstrates how to make the mini-language more ergonomic
+# by implicitly treating a list of expressions as a sequence if it's not
+# an explicit operation (like "set", "call", etc.). This avoids the need
+# to always wrap multiple expressions in a `["seq", ...]` form.
+def do_implicit(env_stack: list, expr):
+    """
+    An interpreter that handles implicit sequences in a dynamic-scoped context.
+    This `do_implicit` interpreter is a self-contained version for demonstration,
+    it includes its own `env_get_implicit` and `env_set_implicit` helpers.
+    """
+
+    # Helper functions for environment access, locally defined for this interpreter.
+    def env_get_implicit(name):
+        for frame in reversed(env_stack):
+            if name in frame:
+                return frame[name]
+        raise NameError(f"Name '{name}' not found")
+
+    def env_set_implicit(name, value):
+        env_stack[-1][name] = value
+
+    # Base case: if not a list, it's a literal or potentially a variable.
+    if not isinstance(expr, list):
+        # If it's a string identifier, attempt to retrieve its value from the environment.
+        if isinstance(expr, str) and expr.isidentifier():
+            try:
+                return env_get_implicit(expr)
+            except NameError:
+                return expr  # If not found, treat as a literal string.
+        return expr  # Return literal numbers or non-identifier strings.
+
+    # Implicit Sequence Detection:
+    # If the expression is a list, and its first element is also a list,
+    # we assume it's an implicit sequence of expressions to be executed.
+    # E.g., `[[set, x, 1], [add, x, 2]]` vs `[set, x, 1]`.
+    if len(expr) > 0 and isinstance(expr[0], list):
+        result = None
+        for sub_expr in expr:
+            # Recursively call do_implicit for each sub-expression in the sequence.
+            result = do_implicit(env_stack, sub_expr)
+        return (
+            result  # The result of the sequence is the result of its last expression.
+        )
+
+    # If it's an explicit operation (e.g., ["set", ...], ["call", ...])
+    op, *args = expr
+    if op == "set":
+        # Evaluate the value and set it in the current dynamic scope.
+        env_set_implicit(args[0], do_implicit(env_stack, args[1]))
+        return None
+    elif op == "get":
+        return env_get_implicit(args[0])
+    elif op == "add":
+        return do_implicit(env_stack, args[0]) + do_implicit(env_stack, args[1])
+
+    elif op == "func":
+        # Function definition, stores params and body.
+        return ["func", args[0], args[1]]
+    elif op == "call":
+        # Function call logic.
+        func = env_get_implicit(args[0])
+        params, body = func[1], func[2]
+        values = [do_implicit(env_stack, a) for a in args[1:]]
+        # Create a new stack frame for the function's local variables.
+        new_frame = dict(zip(params, values))
+        env_stack.append(new_frame)
+
+        # Execute the function's body. The body itself might be an implicit sequence,
+        # which the recursive call to `do_implicit` will handle.
+        result = do_implicit(env_stack, body)
+        env_stack.pop()  # Remove the stack frame after function execution.
+        return result
+    elif op == "seq":
+        # Explicit sequence operator, behaves the same as implicit sequence.
+        result = None
+        for sub_expr in args:
+            result = do_implicit(env_stack, sub_expr)
+        return result
+    raise ValueError(f"Unknown operation: {op}")
+
+
+# --- Main Execution Block ---
+
 if __name__ == "__main__":
-    print("--- Running Mini-Language Example Program ---")
-    # Initialize the global environment.
-    global_frame = {}
-    # The environment stack starts with just the global frame.
-    interpreter_env = [global_frame]
 
-    # Execute the example program.
-    do(interpreter_env, example_program)
-    print("--- Program Finished ---")
-    print(f"Final global environment: {interpreter_env[0]}")
+    print("--- Running Base Example Program (Dynamic Scoping) ---")
 
-    print("\n--- Python Closure Examples (from text) ---")
-    print("Note: The mini-language interpreter above uses dynamic scoping,")
-    print("      and thus does not implement closures in the same way Python does.")
-    print("      These examples illustrate lexical scoping and closures in Python.")
+    # This demonstrates the original interpreter with dynamic scoping.
 
-    # Example 1: Inner function accessing outer function's variable
-    def outer(value):
-        def inner(current):
-            # 'inner' closes over 'value' from 'outer's scope
-            print(f"inner sum is {current + value}")
+    # Expected output: 2, 4, 8, 16
 
-        print(f"outer value is {value}")
-        for i in range(3):
-            inner(i)
+    do([{}], example_program)
 
-    print("\n--- Example: Inner function accessing outer scope ---")
-    outer(10)
+    print("--- Base Program Finished ---\n")
 
-    # Example 2: Returning an inner function (closure)
-    def make_hidden(thing):
-        def _inner():
-            # '_inner' closes over 'thing'
-            return thing
-        return _inner
+    print("--- EXERCISE DEMONSTRATIONS ---\n")
 
-    print("\n--- Example: Returning a closure ---")
-    has_secret = make_hidden(1 + 2)
-    print("hidden thing is", has_secret()) # 'has_secret' still remembers 'thing' (which is 3)
+    # 1. Arity Mismatch
 
-    # Example 3: Implementing objects using closures
-    def make_object(initial_value):
-        # 'private' dictionary is closed over by getter and setter
-        private = {"value": initial_value}
+    print("1. Arity Mismatch Test:")
 
-        def getter():
-            return private["value"]
+    # This program defines a function `add` expecting two arguments,
 
-        def setter(new_value):
-            private["value"] = new_value
+    # but then calls it with only one. The `assert` in `_do_call_handler`
 
-        return {"get": getter, "set": setter}
+    # (which is part of the original interpreter) should catch this.
 
-    print("\n--- Example: Object-like behavior with closures ---")
-    obj = make_object(0) # Note: Changed from 00 to 0 for clarity, 00 is octal in some contexts
-    print("initial value", obj["get"]())
-    obj["set"](99)
-    print("object now contains", obj["get"]())
+    arity_mismatch_program = [
+        "seq",
+        ["set", "add", ["func", ["a", "b"], ["add", ["get", "a"], ["get", "b"]]]],
+        [
+            "call",
+            "add",
+            5,
+        ],  # Calling with 1 arg instead of 2, will cause an AssertionError
+    ]
 
-    # Example 4: What can change? (Illustrating Python's variable capture rules)
-    # This example from the text highlights a common pitfall with closures in Python
-    # when trying to modify a variable from an enclosing scope directly.
+    try:
 
-    print("\n--- Example: Python's variable capture rules (make_counter) ---")
+        do([{}], arity_mismatch_program)
 
-    # This version fails because 'value' in _inner is treated as a local variable
-    # when assigned to, but it's not defined locally. Python 3 requires 'nonlocal'
-    # for modifying enclosing scope variables.
-    # def make_counter_failing():
-    #     value = 0
-    #     def _inner():
-    #         value += 1 # UnboundLocalError: local variable 'value' referenced before assignment
-    #         return value
-    #     return _inner
+    except AssertionError as e:
 
-    # print("\nFailing counter (commented out to prevent error):")
-    # c_failing = make_counter_failing()
-    # try:
-    #     for i in range(3):
-    #         print(c_failing())
-    # except UnboundLocalError as e:
-    #     print(f"Error: {e} (as expected)")
+        print(f"  Successfully caught arity mismatch error: {e}\n")
 
-    # This version works by using a mutable list to hold the value.
-    # The list itself is captured, and its contents can be modified.
-    def make_counter_working():
-        value = [0] # 'value' is a list, which is mutable
-        def _inner():
-            value[0] += 1 # Modifying the element of the captured list
-            return value[0]
-        return _inner
+    else:
 
-    print("\nWorking counter:")
-    c_working = make_counter_working()
-    for i in range(3):
-        print(c_working())
+        print("  Error: Arity mismatch not caught.\n")
 
-    # Example 5: How private are closures? (Illustrating shared mutable state)
-    print("\n--- Example: Shared mutable state in closures ---")
+    # 2. Loop-based Stack Frame Creation
 
-    def wrap(extra):
-        def _inner(f):
-            # _inner closes over 'extra'. If 'extra' is mutable and modified
-            # outside, the closure will see the changes.
-            return [f(x) for x in extra]
-        return _inner
+    print("2. Loop-based Stack Frame Creation Test:")
 
-    odds = [1, 3, 5]
-    first = wrap(odds)
-    print("1.", first(lambda x: 2 * x)) # Uses [1, 3, 5] -> [2, 6, 10]
+    print(
+        "  The `_do_call_handler` function already includes the solution for this exercise."
+    )
 
-    odds = [7, 9, 11] # 'odds' is reassigned, but 'first' still holds a reference to the *original* list [1, 3, 5]
-    print("2.", first(lambda x: 2 * x)) # Still uses [1, 3, 5] -> [2, 6, 10]
-    # Explanation: Python's closure captures the *reference* to the list object
-    # that 'odds' pointed to at the time 'wrap' was called. Reassigning 'odds'
-    # to a new list does not change the object that 'first' (via its closure) refers to.
+    print("  Instead of `dict(zip(params, values))`, it uses a `for` loop to manually")
 
-    evens = [2, 4, 6]
-    second = wrap(evens)
-    print("3.", second(lambda x: 2 * x)) # Uses [2, 4, 6] -> [4, 8, 12]
+    print(
+        "  construct the new function call frame, demonstrating direct variable binding.\n"
+    )
 
-    evens.append(8) # The *same list object* that 'second' captured is modified
-    print("4.", second(lambda x: 2 * x)) # Now uses [2, 4, 6, 8] -> [4, 8, 12, 16]
-    # Explanation: Here, 'evens.append(8)' modifies the list object *in place*.
-    # Since 'second's closure holds a reference to this exact list object,
-    # it sees the modification. This demonstrates that closures capture references,
-    # and if the referenced object is mutable, changes to it are visible through the closure.
+    # 3. Working Counter Test
+
+    print("3. Working Counter Test (Closure Behavior):")
+
+    # Demonstrates the two common Pythonic ways to create a counter closure
+
+    # that correctly modifies state.
+
+    print("  Mutable list counter:")
+
+    counter_m = make_counter_mutable()
+
+    print(f"    Call 1: {counter_m()}")  # Expected: 1
+
+    print(f"    Call 2: {counter_m()}")  # Expected: 2
+
+    print(f"    Call 3: {counter_m()}\n")  # Expected: 3
+
+    print("  `nonlocal` keyword counter:")
+
+    counter_nl = make_counter_nonlocal()
+
+    print(f"    Call 1: {counter_nl()}")  # Expected: 1
+
+    print(f"    Call 2: {counter_nl()}")  # Expected: 2
+
+    print(f"    Call 3: {counter_nl()}\n")  # Expected: 3
+
+    # 4. Chained Maps for Lexical Scoping
+
+    print("4. Lexical Scoping with Chained Maps Test:")
+
+    # This example demonstrates a core concept of lexical scoping:
+
+    # a function "remembers" the environment in which it was *defined*.
+
+    # The `make_adder` function defines an inner function that closes over `n`.
+
+    # When `add_five` is called later, it still has access to the `n=5` from
+
+    # its definition context, even though `make_adder` has already returned.
+
+    lexical_program = [
+        "seq",
+        [
+            "set",
+            "make_adder",  # Define a function that returns another function (a closure)
+            [
+                "func",
+                ["n"],  # Outer function `make_adder` takes `n`
+                ["func", ["x"], ["add", "x", "n"]],  # Inner function closes over `n`
+            ],
+        ],
+        [
+            "set",
+            "add_five",
+            ["call", "make_adder", 5],
+        ],  # `add_five` is now a closure where `n` is 5
+        [
+            "set",
+            "result",
+            ["call", "add_five", 10],
+        ],  # Call `add_five` with `x=10`. Should be 10 + 5.
+    ]
+
+    # Initialize a new environment specifically for the lexical interpreter.
+
+    global_env_lexical = ChainedMap()
+
+    do_lexical(global_env_lexical, lexical_program)
+
+    result_lexical = global_env_lexical.get("result")
+
+    print(f"  Result of (10 + 5) with lexical scope: {result_lexical}")
+
+    assert result_lexical == 15
+
+    print("  Lexical scoping test successful.\n")
+
+    # 5. Implicit Sequence
+
+    print("5. Implicit Sequence Test:")
+
+    # This program defines `my_func` whose body is a list of expressions
+
+    # NOT explicitly wrapped in a `["seq", ...]` operator.
+
+    # The `do_implicit` interpreter should automatically recognize this
+
+    # as a sequence and execute its expressions in order.
+
+    implicit_seq_program = [
+        "seq",
+        [
+            "set",
+            "my_func",
+            [
+                "func",
+                ["a"],
+                [  # Function body is an implicit sequence of two operations
+                    ["set", "b", ["add", "a", 1]],  # First: set `b` to `a + 1`
+                    [
+                        "add",
+                        "b",
+                        10,
+                    ],  # Second: add 10 to `b` (this is the return value)
+                ],
+            ],
+        ],
+        ["set", "final_result", ["call", "my_func", 5]],  # Call `my_func` with `a=5`
+    ]
+
+    implicit_env = [{}]  # Initialize a new environment for the implicit interpreter.
+
+    do_implicit(implicit_env, implicit_seq_program)
+
+    final_result_implicit = implicit_env[0][
+        "final_result"
+    ]  # Expected: (5 + 1) + 10 = 16
+
+    print(f"  Result of implicit sequence ((5+1)+10): {final_result_implicit}")
+
+    assert final_result_implicit == 16
+
+    print("  Implicit sequence test successful.\n")
