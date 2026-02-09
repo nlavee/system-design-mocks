@@ -14,6 +14,7 @@ class TokenType(Enum):
     BOOLEAN = auto()       # true, false
     NULL = auto()          # null
     EOF = auto()           # End of file/string
+    UNKNOWN = auto()       # Unrecognized character
 
 @dataclass(frozen=True)
 class Token:
