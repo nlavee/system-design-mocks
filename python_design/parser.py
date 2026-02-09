@@ -49,6 +49,7 @@ class Tokenizer():
       self.result.append([thing])
 
 
+# Test case
 def test_tok_empty_string():
   assert Tokenizer().tok("") == []
 
