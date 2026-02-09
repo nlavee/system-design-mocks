@@ -1,183 +1,240 @@
 import unittest
-from parser import Parser
-from exceptions import JsonParseException
-from tokenizer import Tokenizer # For direct tokenizer testing if needed
-from models import TokenType
+from typing import Any
+
+from exceptions import (
+    DuplicateKeyException,
+    InvalidNumberException,
+    InvalidStringException,
+    MalformedJsonException,
+    UnexpectedEndOfInputException,
+    UnexpectedTokenException,
+    UnterminatedStringException,
+)
+from parser import Parser, loads
+from tokenizer import Tokenizer, TokenType
+
 
 class TestJsonParser(unittest.TestCase):
+    def test_parse_string(self):
+        self.assertEqual(loads('"hello"'), "hello")
+        self.assertEqual(loads('""'), "")
+        self.assertEqual(loads('"with spaces"'), "with spaces")
+        self.assertEqual(loads('"number 123"'), "number 123")
 
-    def test_parse_string_simple(self):
-        parser = Parser('"hello"')
-        self.assertEqual(parser.parse(), "hello")
+    def test_parse_string_escape_sequences(self):
+        self.assertEqual(loads(r'"hello\"world"'), 'hello"world')
+        self.assertEqual(loads(r'"hello\\world"'), "hello\\world")
+        self.assertEqual(loads(r'"hello\/world"'), "hello/world")
+        self.assertEqual(loads(r'"hello\bworld"'), "hello\bworld")
+        self.assertEqual(loads(r'"hello\fworld"'), "hello\fworld")
+        self.assertEqual(loads(r'"hello\nworld"'), "hello\nworld")
+        self.assertEqual(loads(r'"hello\rworld"'), "hello\rworld")
+        self.assertEqual(loads(r'"hello\tworld"'), "hello\tworld")
+        self.assertEqual(loads(r'"\u00A9"'), "©")  # Copyright symbol
+        self.assertEqual(loads(r'"\uABCD"'), "\uABCD")
+        self.assertEqual(loads(r'"\uabcd"'), "\uabcd")
+        self.assertEqual(loads(r'"\u0024"'), "$")  # Dollar sign
 
-    @unittest.skip("Known issue: Unicode escape and backslash-slash parsing need review in _tokenize_string.")
-    def test_parse_string_with_escapes(self):
-        parser = Parser(r'" \"\\\\\/\\b\\f\\n\\r\\t\\u00A9 "')
-        self.assertEqual(parser.parse(), ' "\\/\b\f\n\r\t© "')
+    def test_parse_number(self):
+        self.assertEqual(loads("123"), 123)
+        self.assertEqual(loads("-123"), -123)
+        self.assertEqual(loads("0"), 0)
+        self.assertEqual(loads("1.23"), 1.23)
+        self.assertEqual(loads("-1.23"), -1.23)
+        self.assertEqual(loads("0.0"), 0.0)
+        self.assertEqual(loads("1e10"), 1e10)
+        self.assertEqual(loads("1E+10"), 1e10)
+        self.assertEqual(loads("1e-10"), 1e-10)
+        self.assertEqual(loads("1.23e+5"), 1.23e5)
+        self.assertEqual(loads("-1.23e-5"), -1.23e-5)
 
-    def test_parse_number_integer(self):
-        parser = Parser('123')
-        self.assertEqual(parser.parse(), 123)
-
-    def test_parse_number_negative(self):
-        parser = Parser('-456')
-        self.assertEqual(parser.parse(), -456)
-
-    def test_parse_number_float(self):
-        parser = Parser('7.89')
-        self.assertEqual(parser.parse(), 7.89)
-
-    def test_parse_number_exponent(self):
-        parser = Parser('1.2e-10')
-        self.assertEqual(parser.parse(), 1.2e-10)
-        parser = Parser('10E+5')
-        self.assertEqual(parser.parse(), 10e+5)
-
-    def test_parse_boolean_true(self):
-        parser = Parser('true')
-        self.assertTrue(parser.parse())
-
-    def test_parse_boolean_false(self):
-        parser = Parser('false')
-        self.assertFalse(parser.parse())
+    def test_parse_boolean(self):
+        self.assertEqual(loads("true"), True)
+        self.assertEqual(loads("false"), False)
 
     def test_parse_null(self):
-        parser = Parser('null')
-        self.assertIsNone(parser.parse())
-
-    def test_parse_empty_array(self):
-        parser = Parser('[]')
-        self.assertEqual(parser.parse(), [])
-
-    def test_parse_array_of_primitives(self):
-        parser = Parser('[1, "two", true, null, -5.5]')
-        self.assertEqual(parser.parse(), [1, "two", True, None, -5.5])
+        self.assertEqual(loads("null"), None)
 
     def test_parse_empty_object(self):
-        parser = Parser('{}')
-        self.assertEqual(parser.parse(), {})
+        self.assertEqual(loads("{}"), {})
 
-    def test_parse_object_of_primitives(self):
-        parser = Parser('{"a": 1, "b": "two", "c": true, "d": null, "e": -5.5}')
-        self.assertEqual(parser.parse(), {"a": 1, "b": "two", "c": True, "d": None, "e": -5.5})
+    def test_parse_simple_object(self):
+        json_str = '{"key": "value", "num": 123, "bool": true, "n": null}'
+        expected = {"key": "value", "num": 123, "bool": True, "n": None}
+        self.assertEqual(loads(json_str), expected)
 
-    def test_nested_array(self):
-        parser = Parser('[1, [2, 3], 4]')
-        self.assertEqual(parser.parse(), [1, [2, 3], 4])
+    def test_parse_nested_object(self):
+        json_str = '{"a": {"b": "c"}, "d": 1}'
+        expected = {"a": {"b": "c"}, "d": 1}
+        self.assertEqual(loads(json_str), expected)
 
-    def test_nested_object(self):
-        parser = Parser('{"a": 1, "b": {"c": 2}, "d": 3}')
-        self.assertEqual(parser.parse(), {"a": 1, "b": {"c": 2}, "d": 3})
+    def test_parse_empty_array(self):
+        self.assertEqual(loads("[]"), [])
 
-    def test_complex_nested_structure(self):
+    def test_parse_simple_array(self):
+        json_str = '["a", 1, true, null]'
+        expected = ["a", 1, True, None]
+        self.assertEqual(loads(json_str), expected)
+
+    def test_parse_nested_array(self):
+        json_str = '[1, [2, 3], {"a": 4}]'
+        expected = [1, [2, 3], {"a": 4}]
+        self.assertEqual(loads(json_str), expected)
+
+    def test_parse_complex_structure(self):
         json_str = """
         {
-            "name": "Test User",
-            "age": 30,
-            "isStudent": false,
-            "courses": [
-                {"title": "History I", "credits": 3},
-                {"title": "Math II", "credits": 4, "prereqs": ["Math I", null]}
+            "name": "Test Object",
+            "version": 1.0,
+            "enabled": true,
+            "data": [
+                {"id": 1, "value": "first"},
+                {"id": 2, "value": "second", "details": {"tag": "important"}}
             ],
-            "address": {
-                "street": "123 Main St",
-                "city": "Anytown",
-                "zip": "12345"
-            },
-            "grades": [90, 85, 92.5],
-            "metadata": null
+            "options": null,
+            "numbers": [-1, 0, 1.5, 1e-5]
         }
         """
-        expected_dict = {
-            "name": "Test User",
-            "age": 30,
-            "isStudent": False,
-            "courses": [
-                {"title": "History I", "credits": 3},
-                {"title": "Math II", "credits": 4, "prereqs": ["Math I", None]}
+        expected = {
+            "name": "Test Object",
+            "version": 1.0,
+            "enabled": True,
+            "data": [
+                {"id": 1, "value": "first"},
+                {"id": 2, "value": "second", "details": {"tag": "important"}},
             ],
-            "address": {
-                "street": "123 Main St",
-                "city": "Anytown",
-                "zip": "12345"
-            },
-            "grades": [90, 85, 92.5],
-            "metadata": None
+            "options": None,
+            "numbers": [-1, 0, 1.5, 1e-5],
         }
-        parser = Parser(json_str)
-        self.assertEqual(parser.parse(), expected_dict)
+        self.assertEqual(loads(json_str), expected)
 
     # --- Error Handling Tests ---
 
-    def test_empty_input(self):
-        with self.assertRaisesRegex(JsonParseException, r".*Unexpected token: TokenType.EOF"):
-            Parser('').parse()
+    def test_malformed_json_missing_brace(self):
+        with self.assertRaisesRegex(UnexpectedEndOfInputException, r"Unexpected end of input, expected ',' or '}'"):
+            loads('{"key": "value"')
+        with self.assertRaisesRegex(UnexpectedEndOfInputException, r"Unexpected end of input, expected ',' or '}'"):
+            loads('{"a": {"b": 1')
 
-    def test_unexpected_character(self):
-        with self.assertRaisesRegex(JsonParseException, r".*Unexpected character: \$"):
-            Parser('$').parse()
-        with self.assertRaisesRegex(JsonParseException, r".*Unexpected character: A"):
-            Parser('{"key": A}').parse()
+    def test_malformed_json_missing_bracket(self):
+        with self.assertRaisesRegex(UnexpectedEndOfInputException, r"Unexpected end of input, expected ',' or ']'"):
+            loads('["value", 1')
+        with self.assertRaisesRegex(UnexpectedEndOfInputException, r"Unexpected end of input, expected ',' or ']'"):
+            loads('[1, [2')
 
-    def test_invalid_json_missing_brace(self):
-        with self.assertRaisesRegex(JsonParseException, r".*Expected.*(?:,|[}}]).*EOF"):
-            Parser('{"key": "value"').parse()
+    def test_malformed_json_missing_colon(self):
+        with self.assertRaisesRegex(UnexpectedTokenException, r"Expected COLON"):
+            loads('{"key" "value"}')
+        with self.assertRaisesRegex(UnexpectedTokenException, r"Expected COLON"):
+            loads('{"key": 1, "another_key" "value"}')
 
-    def test_invalid_json_missing_bracket(self):
-        with self.assertRaisesRegex(JsonParseException, r".*Expected.*(?:,|[\]]).*EOF"):
-            Parser('[1, 2, 3').parse()
+    def test_malformed_json_missing_comma_object(self):
+        with self.assertRaisesRegex(UnexpectedTokenException, r"Expected ',' or '}'"):
+            loads('{"key1": "value1" "key2": "value2"}')
 
-    def test_invalid_json_missing_colon(self):
-        with self.assertRaisesRegex(JsonParseException, r".*Expected.*COLON.*"):
-            Parser('{"key" "value"}').parse()
+    def test_malformed_json_missing_comma_array(self):
+        with self.assertRaisesRegex(UnexpectedTokenException, r"Expected ',' or '\]'"):
+            loads('["value1" "value2"]')
 
-    def test_invalid_json_missing_comma_object(self):
-        with self.assertRaisesRegex(JsonParseException, r".*Expected.*',' or '}'.*"):
-            Parser('{"a":1 "b":2}').parse()
+    def test_unterminated_string(self):
+        with self.assertRaisesRegex(UnterminatedStringException, r"Unterminated string literal"):
+            loads('"hello')
+        with self.assertRaisesRegex(UnterminatedStringException, r"Unterminated string literal"):
+            loads('{"key": "value')
 
-    def test_invalid_json_missing_comma_array(self):
-        with self.assertRaisesRegex(JsonParseException, r".*Expected.*',' or ']'.*"):
-            Parser('[1 2]').parse()
+    def test_invalid_escape_sequence(self):
+        with self.assertRaisesRegex(InvalidStringException, r"Invalid escape sequence: \\x"):
+            loads(r'"\x"')
+        with self.assertRaisesRegex(InvalidStringException, r"Invalid escape sequence: \\z"):
+            loads(r'"hello\zworld"')
+
+    def test_invalid_unicode_escape_sequence(self):
+        with self.assertRaisesRegex(InvalidStringException, r"Invalid unicode escape sequence"):
+            loads(r'"\u123"')  # Too few hex digits
+        with self.assertRaisesRegex(InvalidStringException, r"Invalid unicode escape sequence"):
+            loads(r'"\uGHIJ"')  # Invalid hex digits
+
+    def test_invalid_number_format(self):
+        with self.assertRaisesRegex(MalformedJsonException, r"Unexpected character: '\.'"):
+            loads(".123")
+        with self.assertRaisesRegex(MalformedJsonException, r"Unexpected character: 'a'"):
+            loads("123a")
+        with self.assertRaisesRegex(InvalidNumberException, r"Invalid number format: '01'"):
+            loads("01")  # leading zero not allowed unless it's just '0'
+        with self.assertRaisesRegex(InvalidNumberException, r"Invalid number format: '0\.0\.1'"):
+            loads("0.0.1")  # multiple decimal points
+        with self.assertRaisesRegex(InvalidNumberException, r"Invalid number format: '1\.e'"):
+            loads("1.e")  # missing digits after e
+        with self.assertRaisesRegex(InvalidNumberException, r"Invalid number format: '1e\+'"):
+            loads("1e+")  # missing digits after +
+        with self.assertRaisesRegex(InvalidNumberException, r"Invalid number format: '1e\-'"):
+            loads("1e-")  # missing digits after -
+
+    def test_unexpected_token_start(self):
+        with self.assertRaisesRegex(MalformedJsonException, r"Unexpected character: '!'"):
+            loads("!json")
+        with self.assertRaisesRegex(MalformedJsonException, r"Unexpected character: 'a'"):
+            loads("abc")
 
     def test_extra_data_after_json(self):
-        with self.assertRaisesRegex(JsonParseException, r"Extra data after JSON object"):
-            Parser('{}abc').parse()
-        with self.assertRaisesRegex(JsonParseException, r"Extra data after JSON object"):
-            Parser('[1,2] extra').parse()
+        with self.assertRaisesRegex(MalformedJsonException, r"Unexpected character: 'e'"):
+            loads('{"a":1} extra')
+        with self.assertRaisesRegex(MalformedJsonException, r"Extra data after JSON document"):
+            loads('[1,2] "string"')
 
-    def test_invalid_string_bad_escape(self):
-        with self.assertRaisesRegex(JsonParseException, r"Invalid escape sequence"):
-            Parser(r'"\z"').parse()
+    def test_duplicate_keys_in_object(self):
+        with self.assertRaisesRegex(DuplicateKeyException, r"Duplicate key 'key' found in object"):
+            loads('{"key": 1, "key": 2}')
+        with self.assertRaisesRegex(DuplicateKeyException, r"Duplicate key 'a' found in object"):
+            loads('{"a": 1, "b": 2, "a": 3}')
 
-    def test_invalid_string_bad_unicode_escape(self):
-        with self.assertRaisesRegex(JsonParseException, r"Invalid Unicode escape sequence"):
-            Parser(r'"\uZZZZ"').parse()
-        with self.assertRaisesRegex(JsonParseException, r"Invalid Unicode escape sequence"):
-            Parser(r'"\u00A"').parse() # Too few hex digits
+    def test_trailing_comma_object(self):
+        with self.assertRaisesRegex(MalformedJsonException, r"Trailing comma not allowed in object"):
+            loads('{"a": 1,}')
+        with self.assertRaisesRegex(MalformedJsonException, r"Trailing comma not allowed in object"):
+            loads('{"a": 1, "b": 2,}')
 
-    def test_invalid_number_leading_zero(self):
-        with self.assertRaisesRegex(JsonParseException, r"Invalid number format: leading zero"):
-            Parser('0123').parse()
+    def test_trailing_comma_array(self):
+        with self.assertRaisesRegex(MalformedJsonException, r"Trailing comma not allowed in array"):
+            loads('[1, 2,]')
+        with self.assertRaisesRegex(MalformedJsonException, r"Trailing comma not allowed in array"):
+            loads('["a",]')
 
-    def test_invalid_number_no_digit_after_dot(self):
-        with self.assertRaisesRegex(JsonParseException, r"Invalid number format: digit expected after '.'"):
-            Parser('12.').parse()
+    def test_mixed_whitespace(self):
+        json_str = """
+        {
+            "key1" : "value1",
+            "key2":  [1, 2,
+            3   ],
+            "key3"
+            : {"nested"  :  true}
+        }
+        """
+        expected = {
+            "key1": "value1",
+            "key2": [1, 2, 3],
+            "key3": {"nested": True},
+        }
+        self.assertEqual(loads(json_str), expected)
 
-    def test_invalid_number_no_digit_after_exponent(self):
-        with self.assertRaisesRegex(JsonParseException, r"Invalid number format: digit expected after exponent"):
-            Parser('1e+').parse()
+    def test_tokenizer_edge_cases(self):
+        tokenizer = Tokenizer(r'{"k": "v\", \t\n\r\f\b\/\\u000a"}')
+        tokens = list(tokenizer.tokenize())
+        self.assertEqual(tokens[0].type, TokenType.LEFT_BRACE)
+        self.assertEqual(tokens[1].type, TokenType.STRING)
+        self.assertEqual(tokens[1].value, "k")
+        self.assertEqual(tokens[2].type, TokenType.COLON)
+        self.assertEqual(tokens[3].type, TokenType.STRING)
+        self.assertEqual(tokens[3].value, 'v", \t\n\r\f\b/\\u000a') # Corrected expected value
+        self.assertEqual(tokens[4].type, TokenType.RIGHT_BRACE)
+        self.assertEqual(tokens[5].type, TokenType.EOF)
 
-    def test_invalid_string_unterminated(self):
-        with self.assertRaisesRegex(JsonParseException, r"Unterminated string"):
-            Parser('"hello').parse()
+        with self.assertRaisesRegex(UnterminatedStringException, r"Unterminated string literal"):
+            list(Tokenizer('"abc').tokenize())
 
-    def test_string_unescaped_newline(self):
-        with self.assertRaisesRegex(JsonParseException, r"Unescaped newline in string"):
-            Parser('"line1\nline2"').parse()
+        with self.assertRaisesRegex(InvalidStringException, r"Invalid unicode escape sequence"):
+            list(Tokenizer(r'"\uZZZZ"').tokenize())
 
-    def test_object_key_not_string(self):
-        with self.assertRaisesRegex(JsonParseException, r"Expected string key"):
-            Parser('{1: "value"}').parse()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

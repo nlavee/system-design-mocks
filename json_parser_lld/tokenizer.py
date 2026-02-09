@@ -1,204 +1,236 @@
-from models import Token, TokenType
-from exceptions import JsonParseException
-from typing import Union
+import re
+from enum import Enum, auto
+from typing import Any, Generator, NamedTuple, Tuple, Union
 
-WHITESPACE = " \t\n\r"
-DIGITS = "0123456789"
+from exceptions import (
+    InvalidNumberException,
+    InvalidStringException,
+    MalformedJsonException,
+    UnexpectedEndOfInputException,
+    UnterminatedStringException,
+)
+
+
+class TokenType(Enum):
+    LEFT_BRACE = auto()  # {
+    RIGHT_BRACE = auto()  # }
+    LEFT_BRACKET = auto()  # [
+    RIGHT_BRACKET = auto()  # ]
+    COLON = auto()  # :
+    COMMA = auto()  # ,
+    STRING = auto()
+    NUMBER = auto()
+    TRUE = auto()
+    FALSE = auto()
+    NULL = auto()
+    EOF = auto()  # End of File
+
+
+class Token(NamedTuple):
+    type: TokenType
+    value: Any
+    line: int
+    column: int
+
+    def __repr__(self):
+        if self.type in (TokenType.STRING, TokenType.NUMBER):
+            return f"Token({self.type.name}, {repr(self.value)}, line={self.line}, col={self.column})"
+        return f"Token({self.type.name}, line={self.line}, col={self.column})"
+
 
 class Tokenizer:
-    """Converts a JSON string into a stream of tokens."""
-    def __init__(self, data: str):
-        self._data = data
-        self._index = 0
-        self._line = 1
-        self._col_start = 0
+    def __init__(self, json_string: str):
+        self.json_string = json_string
+        self.pos = 0
+        self.line = 1
+        self.column = 1
+        self.length = len(json_string)
 
-    def get_next_token(self) -> Token:
-        self._skip_whitespace()
-
-        if self._index >= len(self._data):
-            return Token(TokenType.EOF, None, self._line, self._get_col())
-
-        char = self._data[self._index]
-        col = self._get_col()
-
-        if char == '{':
-            self._advance()
-            return Token(TokenType.LEFT_BRACE, char, self._line, col)
-        if char == '}':
-            self._advance()
-            return Token(TokenType.RIGHT_BRACE, char, self._line, col)
-        if char == '[':
-            self._advance()
-            return Token(TokenType.LEFT_BRACKET, char, self._line, col)
-        if char == ']':
-            self._advance()
-            return Token(TokenType.RIGHT_BRACKET, char, self._line, col)
-        if char == ',':
-            self._advance()
-            return Token(TokenType.COMMA, char, self._line, col)
-        if char == ':':
-            self._advance()
-            return Token(TokenType.COLON, char, self._line, col)
-        # ... other simple tokens like [, ], ,, :
-
-        if char == '"':
-            return self._tokenize_string()
-
-        if char in DIGITS or char == '-':
-            return self._tokenize_number()
-
-        if self._peek_is('true'):
-            self._advance(4)
-            return Token(TokenType.BOOLEAN, True, self._line, col)
-        if self._peek_is('false'):
-            self._advance(5)
-            return Token(TokenType.BOOLEAN, False, self._line, col)
-        if self._peek_is('null'):
-            self._advance(4)
-            return Token(TokenType.NULL, None, self._line, col)
-
-        # If none of the above match, it's an unknown character
-        return Token(TokenType.UNKNOWN, char, self._line, col)
-
-    def _tokenize_string(self) -> Token:
-        start_line, start_col = self._line, self._get_col()
-        self._advance()  # Consume the opening '"'
-        
-        result_chars = []
-        while self._index < len(self._data):
-            char = self._data[self._index]
-            
-            if char == '"':
-                self._advance() # Consume the closing '"'
-                return Token(TokenType.STRING, "".join(result_chars), start_line, start_col)
-            elif char == '\\':
-                self._advance() # Consume the '\'
-                if self._index >= len(self._data):
-                    raise JsonParseException("Unterminated string escape sequence", self._line, self._get_col())
-                
-                escape_char = self._data[self._index]
-                if escape_char == '"':
-                    result_chars.append('"')
-                elif escape_char == '\\':
-                    result_chars.append('\\')
-                elif escape_char == '/':
-                    result_chars.append('/')
-                elif escape_char == 'b':
-                    result_chars.append('\b')
-                elif escape_char == 'f':
-                    result_chars.append('\f')
-                elif escape_char == 'n':
-                    result_chars.append('\n')
-                elif escape_char == 'r':
-                    result_chars.append('\r')
-                elif escape_char == 't':
-                    result_chars.append('\t')
-                elif escape_char == 'u':
-                    self._advance() # Consume 'u'
-                    if self._index + 4 > len(self._data):
-                        raise JsonParseException("Invalid Unicode escape sequence", self._line, self._get_col())
-                    
-                    hex_digits = self._data[self._index : self._index + 4]
-                    try:
-                        unicode_char = chr(int(hex_digits, 16))
-                        result_chars.append(unicode_char)
-                        self._advance(4) # Consume 4 hex digits
-                    except ValueError:
-                        raise JsonParseException(f"Invalid Unicode escape sequence: \\u{hex_digits}", self._line, self._get_col())
-                    continue # Continue to next char after successful unicode parse
+    def _advance(self, count: int = 1):
+        for _ in range(count):
+            if self.pos < self.length:
+                if self.json_string[self.pos] == "\n":
+                    self.line += 1
+                    self.column = 1
                 else:
-                    raise JsonParseException(f"Invalid escape sequence: \\{escape_char}", self._line, self._get_col())
-            elif char == '\n' or char == '\r': # JSON strings cannot contain unescaped newlines
-                raise JsonParseException("Unescaped newline in string", self._line, self._get_col())
+                    self.column += 1
+                self.pos += 1
             else:
-                result_chars.append(char)
-            self._advance()
-            
-        raise JsonParseException("Unterminated string", start_line, start_col)
+                break
 
-    def _tokenize_number(self) -> Token:
-        start_line, start_col = self._line, self._get_col()
-        
-        num_str_chars = []
-        
-        # Handle optional sign
-        if self._peek_char() == '-':
-            num_str_chars.append(self._data[self._index])
+    def _peek(self, count: int = 1) -> str:
+        if self.pos + count - 1 < self.length:
+            return self.json_string[self.pos + count - 1]
+        return ""
+
+    def _read_char(self) -> str:
+        if self.pos < self.length:
+            char = self.json_string[self.pos]
             self._advance()
-        
-        # Parse integer part
-        if self._peek_char() == '0':
-            num_str_chars.append(self._data[self._index])
+            return char
+        return ""
+
+    def _skip_whitespace(self):
+        while self.pos < self.length and self.json_string[self.pos].isspace():
             self._advance()
-            if self._peek_char() in DIGITS: # No leading zeros for non-zero numbers
-                raise JsonParseException("Invalid number format: leading zero", start_line, start_col)
-        elif self._peek_char() in DIGITS:
-            while self._index < len(self._data) and self._peek_char() in DIGITS:
-                num_str_chars.append(self._data[self._index])
-                self._advance()
-        else:
-            raise JsonParseException("Invalid number format: expected digit", start_line, start_col)
+
+    def _read_string(self) -> Token:
+        start_pos = self.pos
+        start_column = self.column
+        start_line = self.line
+        self._advance()  # Consume the opening quote
+
+        value_chars = []
+        while self.pos < self.length:
+            char = self._read_char()
+            if char == "\\":
+                # Handle escape sequences
+                if self.pos >= self.length:
+                    raise UnterminatedStringException(start_line, start_column)
+                escape_char = self._read_char()
+                if escape_char == '"':
+                    value_chars.append('"')
+                elif escape_char == "\\":
+                    value_chars.append("\\")
+                elif escape_char == "/":
+                    value_chars.append("/")
+                elif escape_char == "b":
+                    value_chars.append("\b")
+                elif escape_char == "f":
+                    value_chars.append("\f")
+                elif escape_char == "n":
+                    value_chars.append("\n")
+                elif escape_char == "r":
+                    value_chars.append("\r")
+                elif escape_char == "t":
+                    value_chars.append("\t")
+                elif escape_char == "u":
+                    # Unicode escape sequence \uXXXX
+                    if self.pos + 4 > self.length:
+                        raise InvalidStringException(
+                            "Invalid unicode escape sequence", self.line, self.column
+                        )
+                    hex_digits = self.json_string[self.pos : self.pos + 4]
+                    if not re.fullmatch(r"[0-9a-fA-F]{4}", hex_digits):
+                        raise InvalidStringException(
+                            "Invalid unicode escape sequence", self.line, self.column
+                        )
+                    self._advance(4)
+                    try:
+                        value_chars.append(chr(int(hex_digits, 16)))
+                    except ValueError as e:
+                        raise InvalidStringException(
+                            f"Invalid unicode character: {e}", self.line, self.column
+                        )
+                else:
+                    raise InvalidStringException(
+                        f"Invalid escape sequence: \\{escape_char}",
+                        self.line,
+                        self.column - 1,
+                    )
+            elif char == '"':
+                return Token(
+                    TokenType.STRING,
+                    "".join(value_chars),
+                    start_line,
+                    start_column,
+                )
+            elif char == "\n":
+                # Unescaped newline in string
+                raise UnterminatedStringException(start_line, start_column)
+            else:
+                value_chars.append(char)
+
+        raise UnterminatedStringException(start_line, start_column)
+
+    def _read_number(self) -> Token:
+        start_pos = self.pos
+        start_column = self.column
+        start_line = self.line
+
+        # Find the end of the potential number string
+        temp_pos = self.pos
+        while temp_pos < self.length and (self.json_string[temp_pos].isdigit() or
+                                          self.json_string[temp_pos] in ".-+eE"):
+            temp_pos += 1
         
-        is_float = False
-        # Parse fractional part
-        if self._peek_char() == '.':
-            is_float = True
-            num_str_chars.append(self._data[self._index])
-            self._advance()
-            if not (self._index < len(self._data) and self._peek_char() in DIGITS):
-                raise JsonParseException("Invalid number format: digit expected after '.'", start_line, start_col)
-            while self._index < len(self._data) and self._peek_char() in DIGITS:
-                num_str_chars.append(self._data[self._index])
-                self._advance()
+        number_str_potential = self.json_string[self.pos:temp_pos]
+
+        # Strict JSON number pattern (no leading zeros for non-zero numbers, etc.)
+        number_pattern = r"^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$"
         
-        # Parse exponent part
-        if self._peek_char() in ('e', 'E'):
-            is_float = True
-            num_str_chars.append(self._data[self._index])
-            self._advance()
-            
-            if self._peek_char() in ('+', '-'):
-                num_str_chars.append(self._data[self._index])
-                self._advance()
-            
-            if not (self._index < len(self._data) and self._peek_char() in DIGITS):
-                raise JsonParseException("Invalid number format: digit expected after exponent", start_line, start_col)
-            while self._index < len(self._data) and self._peek_char() in DIGITS:
-                num_str_chars.append(self._data[self._index])
-                self._advance()
-                
-        number_str = "".join(num_str_chars)
-        
+        match = re.fullmatch(number_pattern, number_str_potential)
+
+        if not match:
+            # If the extracted potential string does not fully match a valid JSON number pattern
+            raise InvalidNumberException(number_str_potential, start_line, start_column)
+
+        number_str = match.group(0)
+        self._advance(len(number_str))
+
         try:
-            if is_float:
+            if "." in number_str or "e" in number_str.lower():
                 value = float(number_str)
             else:
                 value = int(number_str)
+            return Token(TokenType.NUMBER, value, start_line, start_column)
         except ValueError:
-            raise JsonParseException(f"Invalid number format: {number_str}", start_line, start_col)
-            
-        return Token(TokenType.NUMBER, value, start_line, start_col)
+            # This should ideally not be reached if regex and conversion are correct, but as a safeguard.
+            raise InvalidNumberException(number_str, start_line, start_column)
 
+    def _read_keyword(self, keyword: str, token_type: TokenType) -> Token:
+        start_column = self.column
+        start_line = self.line
+        if self.json_string.startswith(keyword, self.pos):
+            self._advance(len(keyword))
+            return Token(token_type, None, start_line, start_column)
+        return None  # Indicate not found
 
-    def _advance(self, count=1):
-        for _ in range(count):
-            if self._index < len(self._data) and self._data[self._index] == '\n':
-                self._line += 1
-                self._col_start = self._index + 1
-            self._index += 1
+    def tokenize(self) -> Generator[Token, None, None]:
+        while self.pos < self.length:
+            self._skip_whitespace()
 
-    def _skip_whitespace(self):
-        while self._index < len(self._data) and self._data[self._index] in WHITESPACE:
-            self._advance()
+            if self.pos >= self.length:
+                break
 
-    def _get_col(self) -> int:
-        return self._index - self._col_start + 1
+            char = self.json_string[self.pos]
+            start_column = self.column
+            start_line = self.line
 
-    def _peek_is(self, value: str) -> bool:
-        return self._data[self._index : self._index + len(value)] == value
+            if char == "{":
+                self._advance()
+                yield Token(TokenType.LEFT_BRACE, None, start_line, start_column)
+            elif char == "}":
+                self._advance()
+                yield Token(TokenType.RIGHT_BRACE, None, start_line, start_column)
+            elif char == "[":
+                self._advance()
+                yield Token(TokenType.LEFT_BRACKET, None, start_line, start_column)
+            elif char == "]":
+                self._advance()
+                yield Token(TokenType.RIGHT_BRACKET, None, start_line, start_column)
+            elif char == ":":
+                self._advance()
+                yield Token(TokenType.COLON, None, start_line, start_column)
+            elif char == ",":
+                self._advance()
+                yield Token(TokenType.COMMA, None, start_line, start_column)
+            elif char == '"':
+                yield self._read_string()
+            elif char == "-" or char.isdigit():
+                yield self._read_number()
+            elif self.json_string.startswith("true", self.pos):
+                self._advance(4)
+                yield Token(TokenType.TRUE, True, start_line, start_column)
+            elif self.json_string.startswith("false", self.pos):
+                self._advance(5)
+                yield Token(TokenType.FALSE, False, start_line, start_column)
+            elif self.json_string.startswith("null", self.pos):
+                self._advance(4)
+                yield Token(TokenType.NULL, None, start_line, start_column)
+            else:
+                raise MalformedJsonException(
+                    f"Unexpected character: '{char}'", start_line, start_column
+                )
 
-    def _peek_char(self) -> Union[str, None]:
-        if self._index < len(self._data):
-            return self._data[self._index]
-        return None
+        yield Token(TokenType.EOF, None, self.line, self.column)
