@@ -1117,47 +1117,86 @@ def demo_pubsub() -> None:
 
 
 # =============================================================================
-# CROSS-CUTTING CONCERNS (Staff-Level Discussion Points)
+# CROSS-CUTTING CONCERNS (Staff/Principal Level Discussion Points)
 # =============================================================================
 #
-# PERSISTENCE
-#   RDB (snapshotting): point-in-time snapshots at intervals. Fast restart,
-#     up to [snapshot interval] seconds of data loss on crash.
-#   AOF (Append-Only File): log every write. fsync every second → ~1s data loss.
-#     fsync always → ~0 data loss, but ~2x write latency.
-#   RDB + AOF: use both for safety; AOF used on restart, RDB for backups.
-#   Redis 7.4+ AOFV2: more efficient AOF with periodic compaction.
+# A Staff+ candidate must demonstrate mastery of the CAP theorem and know
+# exactly how Redis fits into it. Redis defaults to AP (Available, Partition
+# tolerant) but can be forced toward CP (Consistent, Partition tolerant).
 #
-# REPLICATION
-#   Primary → Replica(s): async by default. Replica can serve reads.
-#   WAIT command: force synchronous replication for critical writes.
+# 1. PERSISTENCE & DATA DURABILITY
+# --------------------------------
+# - RDB (Snapshotting): Point-in-time binary snapshots. Excellent for backups.
+#   - TRADEOFF: Causes fork() latency spikes (copy-on-write memory overhead).
+#   - RISK: Lose up to [snapshot_interval] seconds of data on crash (e.g., 5 mins).
+# - AOF (Append-Only File): Logs every write command sequentially.
+#   - `appendfsync always`: OS syncs every write to disk. Zero data loss, but
+#     degrades throughput drastically (bound by disk IOPS).
+#   - `appendfsync everysec`: OS syncs once per second. Near-memory speed,
+#     max 1-second data loss exposure. The industry standard default.
+#   - STAFF INSIGHT: Use both. AOF provides fast tactical recovery (minimal loss);
+#     RDB provides strategic recovery (S3 disaster backup). Redis 7+ "AOF Multi-Part"
+#     makes compaction much more efficient.
 #
-# HIGH AVAILABILITY
-#   Redis Sentinel: automatic failover for primary/replica setup.
-#     ~30s failover time; suitable for most use cases.
-#   Redis Cluster: built-in sharding + HA. 16384 hash slots across N primaries.
-#     Each primary has 1+ replicas. Failover in ~10s.
-#   Cluster limitation: multi-key commands (MSET, SUNION) only work if all
-#     keys share the same hash slot (use hash tags: {prefix}).
+# 2. REPLICATION & THE CAP THEOREM
+# --------------------------------
+# - Redis replication is ASYNCHRONOUS by default.
+#   - TRADEOFF (AP): High throughput and available reads via replicas, but if
+#     the primary crashes before replicating an ACK'd write, data is lost
+#     (the "Phantom Write" problem).
+# - The `WAIT` Command:
+#   - Forces synchronous replication. Blocks the client until N replicas have
+#     acknowledged the write.
+#   - TRADEOFF (CP attempt): Drastically increases latency. Even with WAIT, Redis
+#     does NOT offer strict strong consistency (if a failover happens precisely
+#     during aWAIT timeout, the behavior is edge-case dependent).
 #
-# MEMORY MANAGEMENT
-#   Redis is single-threaded for command processing (I/O is multi-threaded
-#   since Redis 6). A slow Lua script or large KEYS scan blocks all commands.
-#   Never use KEYS in production — use SCAN for iterative, non-blocking scans.
+# 3. HIGH AVAILABILITY (HA) TOPOLOGIES
+# ------------------------------------
+# A. Redis Sentinel
+#   - Best for: Pure read-heavy workloads where horizontal write scaling isn't needed.
+#   - Architecture: A quorum of Sentinel nodes monitor the Primary. On failure,
+#     they elect a new Primary and reconfigure clients.
+#   - Weakness: Failover typically takes 3-10 seconds. During this time, writes fail.
+# B. Redis Cluster
+#   - Best for: Massive scale, multi-terabyte datasets, high write throughput.
+#   - Architecture: Shards data across 16,384 hash slots. Decentralized gossip protocol.
+#   - Weakness: Multi-key operations (like MGET, set intersections) FAIL if keys
+#     hash to different shards.
+#   - STAFF INSIGHT: You must design "Hash Tags" (e.g., `{user:42}:profile`, `{user:42}:cart`)
+#     to force related keys into the exact same hash slot to preserve atomic multi-key ops.
 #
-# OBSERVABILITY
-#   INFO memory, INFO stats, INFO replication — essential health metrics.
-#   MONITOR: real-time command log (dev only — massive throughput overhead).
-#   Redis Slow Log: tracks commands > threshold_ms (SLOWLOG GET).
-#   Keyspace notifications: subscribe to events like expired/evicted keys
-#   (useful for building TTL-triggered workflows).
+# 4. MEMORY MANAGEMENT & EVICTION POLICIES
+# ----------------------------------------
+# - If `maxmemory` is hit, Redis crashes on writes unless an eviction policy is set.
+# - Staff rule of thumb: If Redis is a Cache, evict. If Redis is a Store, NEVER evict.
+# - Cache Policies:
+#   - `volatile-lru`: Evict Least Recently Used keys among those with a TTL. (Safest)
+#   - `allkeys-lru`: Treat all keys as cache, evicting the absolute LRU.
+#   - `volatile-ttl`: Evict keys nearest to expiration.
+#   - STAFF INSIGHT (Redis 4+): Use `allkeys-lfu` (Least Frequently Used). LFU tracks
+#     access frequency over time, keeping your hottest caching tier intact even if
+#     a one-off batch job touches millions of obscure keys (which would ruin LRU).
 #
-# SECURITY
-#   Enable ACL (Redis 6+) for per-user command and key-pattern restrictions.
-#   Enable TLS for in-transit encryption.
-#   requirepass for auth (combined with ACL for fine-grained access).
-#   Never expose Redis port to the public internet.
-
+# 5. THE SINGLE-THREADED EVENT LOOP
+# ---------------------------------
+# - Redis executes commands via a single-threaded multiplexed I/O loop.
+# - (Redis 6+ added I/O threads for socket reads/writes, but command execution
+#   remains strictly single-threaded).
+# - THE DANGER: Doing O(N) operations.
+#   - `KEYS *`: Scans the entire namespace. Blocks the single thread. Production outage.
+#   - STAFF INSIGHT: Always use `SCAN / HSCAN / SSCAN`. They return a cursor and
+#     process in batches, yielding the thread back to other clients between calls.
+#
+# 6. OBSERVABILITY (Metrics that matter)
+# --------------------------------------
+# - `used_memory_rss`: The actual RAM the OS allocated. If RSS > used_memory significantly,
+#   you have heavy memory fragmentation. (Restart or active defragmentation needed).
+# - `connected_clients`: High spikes indicate connection leaks or Thundering Herds.
+# - `evicted_keys` per sec: If high, your cache hit rate is trashing due to sizing issues.
+# - `Redis Slowlog`: Always monitor `SLOWLOG GET` for queries >10ms. A 10ms query in
+#   Redis is an eternity and blocks thousands of other requests.
+#
 # =============================================================================
 # DEMO RUNNER
 # =============================================================================
