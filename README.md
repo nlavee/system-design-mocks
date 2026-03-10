@@ -505,7 +505,7 @@ async def main():
 
 ## Part V: Interview Execution and Best Practices
 
-### 7. Mastering the LLD Interview Execution
+### 12. Mastering the LLD Interview Execution
 
 Successfully navigating the System Design LLD round requires a structured, communication-focused approach that prioritizes demonstrating design maturity and strategic thinking over raw implementation speed.
 
@@ -539,3 +539,27 @@ The key to succeeding in this round is architectural foresight. The component de
 *   **Integrate Concurrency Primitives:** Every stateful LLD problem should be analyzed through the lens of potential concurrent access. Candidates should be ready to design thread-safe structures (e.g., LRU Cache) and discuss low-level synchronization primitives like `ReadWriteLocks`.
 *   **Apply System Design Domain Knowledge:** Elevate the standard LLD response by contextualizing the components within modern data architectures. For instance, when designing an audit trail, explicitly model the solution after the reliable transaction logging features of transactional storage layers (Time Travel, ACID guarantees), using terms and concepts specific to the platform.
 *   **Structure and Communication:** Adhere strictly to a phased approach (Requirements → UML → Signatures → Implementation → Trade-offs). Prioritize clear communication of architectural decisions over writing exhaustive code. This structured defense of the design ultimately demonstrates the engineering maturity required for contributing to core infrastructure.
+
+## Part VI: Repository Directory Structure & Implemented Scenarios
+
+This repository contains various mock interview scenarios, system design deep-dives, and Low-Level Design (LLD) implementations. The current structure includes:
+
+*   **`async_api_aggregator_lld/`**: Design of an asynchronous API aggregator pattern.
+*   **`chess_lld/`**: (Case Study 1) Implementation of chess game logic, focusing on rule engines and state.
+*   **`distributed_task_scheduler/`**: LLD for a distributed task or job scheduler.
+*   **`division_lld/`**: (Case Study 2) Low-level utility component for strict integer division.
+*   **`ip_address_blocking/`**: System design for an IP address blocking/filtering mechanism.
+*   **`json_parser_lld/`**: Implementation of a custom JSON parser and tokenizer.
+*   **`kafka/`**: Examples and mock implementations of Kafka message queue concepts.
+*   **`library_system_lld/`**: Classic LLD scenario modeling a library management system.
+*   **`log_storage_service/`**: Design and implementation of a log storage and retrieval service.
+*   **`memory_allocator_lld/`**: Low-level design of a memory allocator (e.g., malloc/free abstractions).
+*   **`parallel_data_processor_lld/`**: Design for processing large datasets in parallel.
+*   **`python_design/`**: Various Python-specific design patterns and scenarios.
+*   **`rate_limiter_lld/`**: Implementation of rate limiting algorithms (e.g., Token Bucket).
+*   **`redis/`**: Redis-related implementations like a scheduled queue and caching concepts.
+*   **`search_system_lld/`**: LLD of search system components including Hybrid Retrieval and ANN Vector Search.
+*   **`time_based_key_value_store/`**: Key-value store that supports retrieving values based on timestamp.
+*   **`top_k_stream/`**: Algorithms for finding the Top-K elements in a continuous stream of data.
+*   **`vending_machine_lld/`**: Classic LLD scenario modeling a state machine for a vending machine.
+*   **`websocket_lld/`**: Implementation and design involving real-time WebSocket communication.
