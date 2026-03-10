@@ -339,13 +339,32 @@ from typing import Generator
 def distributed_lock_with_fencing(lock_name: str, ttl_ms: int = LOCK_TTL_MS) -> Generator[str, None, None]:
     """
     Acquire a Redis lock and yield a globally distributed UNIQUE/MONOTONIC token.
-    Demonstrates OCC (Optimistic Concurrency Control) integration patterns.
+    
+    STAFF+ DEEP DIVE: Why INCR instead of UUID?
+    A standard lock uses a random UUID just to ensure the process that acquired the 
+    lock is the one releasing it. But a UUID cannot protect the UNDERLYING DATABASE.
+    
+    FAILURE SCENARIO (The GC Pause):
+    1. Worker A acquires UUID lock. It begins processing but hits a 15s JVM GC Pause.
+    2. Redis lock TTL expires natively (e.g. 10s).
+    3. Worker B acquires the lock with a new UUID and safely writes to the DB.
+    4. Worker A wakes up. Unaware its lock expired, it writes its payload to the DB,
+       silently overwriting/corrupting Worker B's transaction!
+       
+    THE FIX: FENCING TOKENS
+    By replacing the UUID with `r.incr()`, we generate a strictly monotonic integer 
+    (1, 2, 3...). The lock yields this integer (the Fencing Token) to the caller.
+    The caller passes this token into its Database transaction (Optimistic Concurrency Control):
+      `UPDATE accounts SET balance=..., last_token=35 WHERE id=1 AND last_token < 35`
+      
+    Now, when Worker A wakes up and attempts to write with `last_token=34`, the 
+    database natively rejects the write. We have decoupled system safety from Clock/TTL drift!
     """
     r = get_client()
     lock_key = f"lock:{lock_name}"
     
     # 1. Monotonically increasing Identity via atomic INCR (Fencing Token).
-    # Replaces UUIDs; provides sequential integrity for OCC underlying datastores.
+    # Provides sequential integrity for OCC underlying datastores.
     # Note: the namespace seq:fencing_tokens acts as our global lock sequence.
     token = str(r.incr(f"seq:fencing_tokens")) 
 
