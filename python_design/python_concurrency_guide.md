@@ -29,22 +29,57 @@ The GIL is a mutex (lock) that protects access to Python objects, preventing mul
 ### Key `threading` APIs
 
 #### 1. Fundamental Primitives
-*   `threading.Thread(target=my_func, args=(x,), daemon=False)`: Creates a thread object. 
+*   **`threading.Thread(target=my_func, args=(x,), daemon=False)`**: Creates a thread object. 
     *   *Note: `daemon=True` means the OS will abruptly kill this thread when the main program threads exit. Never use daemons for threads doing critical writes (like writing to a file or DB) as data will be corrupted.*
-*   `thread.start()`: Asks the OS to begin execution.
-*   `thread.join(timeout=None)`: Blocks the calling thread (usually the main thread) until the target thread terminates.
+*   **`thread.start()`**: Asks the OS to begin execution.
+*   **`thread.join(timeout=None)`**: Blocks the calling thread (usually the main thread) until the target thread terminates.
+    ```python
+    import threading
+    
+    def background_task(name):
+        print(f"Task {name} running")
+        
+    t = threading.Thread(target=background_task, args=("A",))
+    t.start()
+    t.join() # Main thread waits here
+    ```
 
 #### 2. Synchronization Primitives (Interview Focus)
 *   **`threading.Lock()`**: A basic boolean context manager (`acquire()` / `release()`). Use it to protect critical sections of code.
+    ```python
+    lock = threading.Lock()
+    with lock:
+        shared_counter += 1 # Protected from race conditions
+    ```
 *   **`threading.RLock()`**: A reentrant lock. A thread can acquire this lock multiple times without deadlocking itself (useful for recursive functions).
 *   **`threading.Semaphore(value)`**: Maintains an internal counter. Used to limit concurrent access to a bounded resource (e.g., limiting to exactly 10 active DB connections).
+    ```python
+    db_pool_semaphore = threading.Semaphore(10) # Max 10 concurrent threads
+    with db_pool_semaphore:
+        pass # Access database safely
+    ```
 *   **`threading.Event()`**: A boolean flag for thread communication (`event.set()`, `event.wait()`, `event.clear()`). Useful for a "stop signal" to gracefully shut down background worker threads.
+    ```python
+    stop_event = threading.Event()
+    
+    def worker():
+        while not stop_event.is_set():
+            pass # Keep polling/working
+            
+    stop_event.set() # Signals all loops relying on this event to stop
+    ```
 
 #### 3. Thread-Safe Communication
 *   **`queue.Queue(maxsize=0)`**: A thread-safe FIFO queue. **This is the gold standard for thread communication.** It abstracts away the locks.
-    *   `put(item, block=True, timeout=None)`
-    *   `get(block=True, timeout=None)`
-    *   `task_done()` / `join()`: Essential for tracking when a queue is fully processed in Producer-Consumer patterns.
+    ```python
+    import queue
+    q = queue.Queue(maxsize=5)
+    
+    q.put("item")         # Blocks if queue is full
+    item = q.get()        # Blocks if queue is empty
+    q.task_done()         # Signal that the retrieved item was processed
+    q.join()              # Blocks until queue is empty AND all task_done() called
+    ```
 
 ### Classic Pattern: Producer-Consumer with `queue.Queue`
 
@@ -113,14 +148,47 @@ def main():
 ### Key `multiprocessing` APIs
 
 #### 1. Core Primitives
-*   `multiprocessing.Process(target, args=())`: Mirrors `threading.Thread`.
-*   `process.start()`, `process.join()`.
+*   **`multiprocessing.Process(target, args=())`**: Mirrors `threading.Thread`.
+*   **`process.start()`**, **`process.join()`**.
+    ```python
+    import multiprocessing
+    
+    def cpu_task():
+        pass
+        
+    if __name__ == '__main__': # Critical guard required on Windows/macOS
+        p = multiprocessing.Process(target=cpu_task)
+        p.start()
+        p.join()
+    ```
 
 #### 2. IPC Mechanisms (Crucial for Interviews)
 *   **`multiprocessing.Queue()`**: A process-safe FIFO queue. Uses OS pipes and internal locks/semaphores. Objects put in here are serialized.
-*   **`multiprocessing.Pipe()`**: Returns a `(conn1, conn2)` tuple. Faster than `Queue` but fundamentally strictly point-to-point (two endpoints only), unlike `Queue` which can have multiple consumers/producers.
-*   **`multiprocessing.Manager()`**: Uses a background server process to hold shared objects (`list`, `dict`) and gives your workers proxies to them. Flexible but extremely slow due to massive IPC overhead on every dict lookup.
-*   **`multiprocessing.shared_memory.SharedMemory` (Python 3.8+)**: **Staff+ Secret Weapon.** Allows allocation of a block of RAM that all processes can read/write to *without serialization*. Used heavily in conjunction with `numpy` arrays to securely share gigabytes of matrices across processes instantaneously.
+*   **`multiprocessing.Pipe()`**: Returns a `(conn1, conn2)` tuple. Faster than `Queue` but fundamentally strictly point-to-point (two endpoints only).
+    ```python
+    parent_conn, child_conn = multiprocessing.Pipe()
+    # In parent process: parent_conn.send(["serializable", "data"])
+    # In child process: data = child_conn.recv()
+    ```
+*   **`multiprocessing.Manager()`**: Uses a background server process to hold shared objects (`list`, `dict`) and gives your workers proxies to them. Flexible but extremely slow due to massive IPC serialization overhead on every access.
+    ```python
+    with multiprocessing.Manager() as manager:
+        shared_dict = manager.dict()
+        shared_list = manager.list()
+        # Pass these to worker processes
+    ```
+*   **`multiprocessing.shared_memory.SharedMemory` (Python 3.8+)**: **Staff+ Secret Weapon.** Allows allocation of a block of RAM that all processes can read/write to *without serialization*. Used heavily with `numpy` arrays to share gigabytes of matrices.
+    ```python
+    from multiprocessing import shared_memory
+    
+    # Create 10 bytes of shared RAM
+    shm = shared_memory.SharedMemory(create=True, size=10)
+    shm.buf[:4] = bytearray([1, 2, 3, 4]) # Mutate shared RAM directly
+    
+    # Cleanup required manually to prevent memory leaks
+    shm.close()
+    shm.unlink()
+    ```
 
 ### Classic Pattern: Worker Processes and `multiprocessing.Queue`
 
@@ -213,24 +281,41 @@ While `threading` and `multiprocessing` provide low-level control, modern Python
 The base class for `ThreadPoolExecutor` and `ProcessPoolExecutor`. Always use it within a context manager (`with` block) to ensure resources are automatically cleaned up via an implicit `executor.shutdown(wait=True)`.
 
 *   **`submit(fn, *args, **kwargs)`**: Schedules the callable to be executed and returns a `Future` object immediately. Best for heterogeneous tasks, fire-and-forget patterns, or when you need immediate access to the `Future` for callbacks.
-*   **`map(fn, *iterables, timeout=None, chunksize=1)`**: Similar to built-in `map()`, but executes concurrently. 
-    *   *Returns results in the exact same order* as the input iterables, yielding them as they become ready but strictly holding the yield order.
-    *   *Staff Tip:* For `ProcessPoolExecutor`, tuning `chunksize` is highly critical. Sending items one-by-one (default `chunksize=1`) incurs massive IPC serialization overhead. A larger chunksize batches iterables to worker processes, dramatically improving throughput.
+*   **`map(fn, *iterables, timeout=None, chunksize=1)`**: Similar to built-in `map()`, but executes concurrently. Keeps result ordering intact.
+    *   *Staff Tip:* For `ProcessPoolExecutor`, tuning `chunksize` is highly critical to avoid massive IPC serialization overhead.
+    ```python
+    import concurrent.futures
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future = executor.submit(pow, 2, 3)                # Submits a single task
+        results = list(executor.map(pow, [2, 3], [3, 2]))  # Concurrently calculates 2^3, 3^2
+    ```
 *   **`shutdown(wait=True, *, cancel_futures=False)`**: Signals the executor to stop accepting new tasks. Context managers call this implicitly.
 
 #### 2. The `Future` Object
 A handle to a task that might not have completed yet.
 
-*   `future.result(timeout=None)`: Blocks until the callable returns. If the callable raised an exception, calling `result()` will immediately re-raise that exact exception on the caller's thread.
-*   `future.exception(timeout=None)`: Returns the exception raised by the callable instead of raising it. Returns `None` if successful. Useful for safely logging errors in batch processing.
-*   `future.add_done_callback(fn)`: Attaches a callable `fn(future)` that runs exactly when the future completes or is cancelled. Useful for asynchronous logging or chaining subsequent pipelines without blocking.
-*   `future.cancel()`: Attempts to cancel the execution. Returns `True` if successful, but returns `False` if the task is already running (cannot interrupt a running thread) or has already completed.
+*   **`future.result(timeout=None)`**: Blocks until the callable returns, or immediately re-raises its exception on the caller thread.
+*   **`future.exception(timeout=None)`**: Returns the exception raised by the callable instead of raising it. Returns `None` if successful.
+*   **`future.add_done_callback(fn)`**: Attaches a callable `fn(future)` that runs exactly when the future completes.
+    ```python
+    def logging_callback(fut):
+        print("Task finished with:", fut.result())
+        
+    future.add_done_callback(logging_callback) # Non-blocking event hook
+    ```
+*   **`future.cancel()`**: Attempts to cancel execution. Cannot interrupt an already running background thread/process.
 
 #### 3. Module Orchestration Functions
 Used to wait on a collection of `Future` objects (usually created by `submit()`).
 
-*   **`concurrent.futures.as_completed(fs, timeout=None)`**: Takes an iterable of Future objects and yields them *in the order they complete*. This is the gold standard for processing results dynamically as soon as they are ready, maximizing throughput and preventing bottlenecking behind a slow task.
-*   **`concurrent.futures.wait(fs, timeout=None, return_when=ALL_COMPLETED)`**: Blocks until a specific condition is met. `return_when` can be `ALL_COMPLETED`, `FIRST_COMPLETED`, or `FIRST_EXCEPTION`. Returns a tuple of two sets: `(done, not_done)`. Perfect for enforcing a strict SLA timeout on a batch of tasks or implementing circuit breaker patterns.
+*   **`as_completed(fs, timeout=None)`**: Yields them *in the order they complete*. This is the gold standard for processing results dynamically, maximizing throughput and preventing bottlenecking behind a slow task.
+    ```python
+    # futures = [executor.submit(work, i) for i in tasks]
+    # for f in concurrent.futures.as_completed(futures):
+    #     print(f.result()) # Processed immediately as it finishes
+    ```
+*   **`wait(fs, timeout=None, return_when=ALL_COMPLETED)`**: Blocks until a specific condition is met (e.g., `FIRST_EXCEPTION`). Returns a tuple of two sets: `(done, not_done)`. Perfect for applying strict SLA timeouts.
 
 ### Modern Pattern 1: The Unified `ThreadPoolExecutor` (I/O Bound)
 
@@ -372,16 +457,48 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
 *   **`async def`**: Syntax to define a coroutine function. It returns a coroutine object without executing it.
 *   **`await`**: The crux of concurrency. Pauses coroutine execution, yields control of the thread back to the Event Loop, and says "wake me up when this I/O is done."
 *   **`asyncio.run(main())`**: The high-level entry point that creates the event loop, runs the passed coroutine until complete, and then gracefully closes the loop.
+    ```python
+    import asyncio
+    
+    async def fetch_data():
+        await asyncio.sleep(1) # YIELD context back to loop
+        return "data"
+        
+    # result = asyncio.run(fetch_data())
+    ```
 
 #### 2. Concurrency Orchestration
 *   **`asyncio.create_task(coro())`**: Wraps a coroutine into an active `Task` and schedules it on the event loop to run concurrently in the background.
-*   **`asyncio.gather(*awaitables, return_exceptions=False)`**: Runs tasks concurrently and waits for them all. Returns a list of results in deterministic order. If `return_exceptions=True`, it traps errors instead of exploding the whole batch.
+*   **`asyncio.gather(*awaitables, return_exceptions=False)`**: Runs tasks concurrently and waits for them all. Returns a list of results in deterministic order.
+    ```python
+    async def batch_fetch():
+        # Both sleepers run concurrently, total time is ~1s, not ~2s
+        results = await asyncio.gather(asyncio.sleep(1), asyncio.sleep(1))
+    ```
 *   **`asyncio.TaskGroup()` (Python 3.11+)**: The modern version of `gather`. A context manager that launches tasks and ensures that if one fails, the others are safely cancelled.
-*   **`asyncio.wait_for(aw, timeout)`**: Wraps an awaitable. Crucial for distributed systems to prevent hanging forever. Raises `TimeoutError`.
+    ```python
+    async with asyncio.TaskGroup() as tg:
+        t1 = tg.create_task(asyncio.sleep(1))
+        t2 = tg.create_task(asyncio.sleep(1))
+    # Loop waits for context manager to exit, then you can access results
+    ```
+*   **`asyncio.wait_for(aw, timeout)`**: Wraps an awaitable with a strict SLA. Raises `TimeoutError` if breached.
 
 #### 3. Synchronization
-*   **`asyncio.Queue`**: An async-friendly queue. Used for backpressure in data pipelines. Use `await q.put()` and `await q.get()`.
-*   **`asyncio.Lock`**: Yes, asyncio has locks! Why? Because if you have a multi-step operation where you `await` inside the critical section, another coroutine might execute and mutate state.
+*   **`asyncio.Queue`**: An async-friendly queue. Used for backpressure in data pipelines.
+    ```python
+    q = asyncio.Queue()
+    await q.put("item")
+    item = await q.get()
+    ```
+*   **`asyncio.Lock`**: Yes, asyncio has locks! Why? Because if you have a multi-step operation where you `await` inside the critical section, another coroutine might execute and mutate your state mid-transaction.
+    ```python
+    lock = asyncio.Lock()
+    async with lock:
+        # Prevent other async routines from mutating records here
+        # await db.update() 
+        pass
+    ```
 
 ### Production Pattern: High-Concurrency Aggregator with Timeouts
 
